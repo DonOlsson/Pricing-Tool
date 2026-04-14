@@ -712,10 +712,14 @@ function doLogin(){
   if(!email){errEl.textContent='Please enter your email address.';return;}
   if(password !== SYSTEM_PASSWORD){errEl.textContent='Incorrect password. Please try again.';g('login-password').value='';return;}
 
-  // Check user exists in appUsers list
-  const user = appUsers.find(u=>(u.email||'').toLowerCase()===email);
+  // Hardcoded admin account — always accessible to manage users even before any are set up
+  const ADMIN_EMAIL = 'admin@geveko.com';
+  let user = appUsers.find(u=>(u.email||'').toLowerCase()===email);
+  if(!user && email===ADMIN_EMAIL){
+    user = {id:0, name:'Administrator', position:'Pricing Manager', email:ADMIN_EMAIL, role:'pricing_mgr'};
+  }
   if(!user){
-    errEl.textContent='This email address is not authorised. Contact your Pricing Manager.';
+    errEl.textContent='This email is not authorised. Contact your Pricing Manager.';
     g('login-password').value='';
     return;
   }
