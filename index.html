@@ -212,8 +212,38 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
 .role-no-cost .cost-col,.role-no-cost .cost-val,.role-no-cost .margin-col,.role-no-cost .margin-val{opacity:0;pointer-events:none;user-select:none}
 .role-no-cost .cost-col *,.role-no-cost .cost-val *,.role-no-cost .margin-col *,.role-no-cost .margin-val *{visibility:hidden}
 </style>
+
+<!-- PASSWORD GATE STYLES -->
+<style>
+#pw-gate{position:fixed;inset:0;z-index:9999;background:#f4f5f8;display:flex;align-items:center;justify-content:center;font-family:'DM Sans',sans-serif}
+#pw-box{background:#fff;border:1px solid #e0e4eb;border-radius:12px;padding:40px 44px;width:100%;max-width:400px;box-shadow:0 8px 40px rgba(0,0,0,0.10);text-align:center}
+.pw-logo{font-size:15px;font-weight:800;color:#e8560a;letter-spacing:0.5px;margin-bottom:4px}
+.pw-sub{font-size:10px;color:#8e97ab;letter-spacing:2px;text-transform:uppercase;margin-bottom:28px}
+.pw-label{font-size:11px;font-weight:600;color:#50586a;letter-spacing:0.5px;display:block;margin-bottom:8px;text-align:left}
+#pw-input{width:100%;padding:11px 14px;font-size:15px;font-family:'DM Mono',monospace;border:2px solid #e0e4eb;border-radius:6px;outline:none;letter-spacing:3px;text-align:center;background:#f4f5f8;transition:border-color 0.2s;margin-bottom:14px;box-sizing:border-box}
+#pw-input:focus{border-color:#e8560a;background:#fff}
+#pw-input.shake{animation:shake 0.4s ease;border-color:#c02828;background:#fdf0f0}
+#pw-submit{width:100%;padding:12px;background:#e8560a;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;letter-spacing:0.5px;transition:background 0.15s}
+#pw-submit:hover{background:#c44306}
+#pw-error{font-size:12px;color:#c02828;margin-top:10px;min-height:18px}
+.pw-hint{font-size:11px;color:#b0b8c8;margin-top:20px}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}
+</style>
 </head>
 <body>
+<!-- PASSWORD GATE -->
+<div id="pw-gate">
+  <div id="pw-box">
+    <div class="pw-logo">GEVEKO MARKINGS</div>
+    <div class="pw-sub">Pricing Tool — Restricted Access</div>
+    <label class="pw-label" for="pw-input">Enter Password</label>
+    <input type="password" id="pw-input" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkPw()">
+    <button id="pw-submit" onclick="checkPw()">ENTER →</button>
+    <div id="pw-error"></div>
+    <div class="pw-hint">Contact your Pricing Manager for access.</div>
+  </div>
+</div>
+
 <div id="app">
 
 <!-- TOPBAR -->
@@ -1258,6 +1288,50 @@ function exportQuote(){
 loadState();          // restore persisted data first
 applyRole(activeRole); // apply the saved role
 renderCalculator();   // render with loaded data
+</script>
+
+<script>
+(function(){
+  // ── CHANGE THE PASSWORD HERE ──────────────────────────────────
+  var PASSWORD = "Geveko2026!";
+  // ─────────────────────────────────────────────────────────────
+
+  var SESSION_KEY = "geveko_auth";
+
+  function checkPw(){
+    var val = document.getElementById('pw-input').value;
+    var errEl = document.getElementById('pw-error');
+    var inp = document.getElementById('pw-input');
+    if(val === PASSWORD){
+      sessionStorage.setItem(SESSION_KEY, "1");
+      document.getElementById('pw-gate').style.display = 'none';
+      document.getElementById('app').style.display = 'flex';
+      errEl.textContent = '';
+    } else {
+      errEl.textContent = 'Incorrect password. Please try again.';
+      inp.value = '';
+      inp.classList.remove('shake');
+      void inp.offsetWidth; // reflow to restart animation
+      inp.classList.add('shake');
+      setTimeout(function(){ inp.classList.remove('shake'); }, 400);
+    }
+  }
+  window.checkPw = checkPw;
+
+  // Check session on load
+  if(sessionStorage.getItem(SESSION_KEY) === "1"){
+    document.getElementById('pw-gate').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+  } else {
+    // Hide the app until authenticated
+    document.addEventListener('DOMContentLoaded', function(){
+      var app = document.getElementById('app');
+      if(app) app.style.display = 'none';
+      // Focus the password field
+      setTimeout(function(){ var i=document.getElementById('pw-input'); if(i) i.focus(); }, 100);
+    });
+  }
+})();
 </script>
 </body>
 </html>
