@@ -44,12 +44,18 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 .panel.active{display:flex}
 #calc-panel{flex-direction:column}
 /* calc-body defined above */
-#calc-left{flex:1;overflow-y:auto;padding:14px 14px 14px 18px;display:flex;flex-direction:column;gap:10px;background:var(--bg)}
+#calc-left{flex:1;overflow-y:auto;padding:14px 14px 220px 18px;display:flex;flex-direction:column;gap:10px;background:var(--bg)}
 #calc-right{width:300px;flex-shrink:0;border-left:1px solid var(--border);overflow-y:auto;padding:14px;background:var(--bg2);display:flex;flex-direction:column;gap:8px}
 /* ── DASHBOARD ── */
 #calc-wrapper{position:relative;flex:1;overflow:hidden;display:flex;flex-direction:column}
-#acct-dashboard{position:absolute;bottom:0;left:0;right:0;z-index:10;border-top:2px solid var(--orange);background:var(--bg2);padding:10px 18px;max-height:200px;overflow-y:auto;display:none;box-shadow:0 -4px 20px rgba(0,0,0,0.10)}
+#acct-dashboard{position:absolute;bottom:0;left:0;right:0;z-index:10;border-top:2px solid var(--orange);background:var(--bg2);display:none;box-shadow:0 -4px 20px rgba(0,0,0,0.12);transition:max-height 0.25s ease}
 #acct-dashboard.visible{display:block}
+#acct-dash-body{padding:8px 18px 10px;overflow-y:auto;max-height:175px}
+#acct-dash-toggle{display:flex;align-items:center;justify-content:space-between;padding:6px 18px;cursor:pointer;border-bottom:1px solid var(--border);user-select:none}
+#acct-dash-toggle:hover{background:var(--orange-lt)}
+#acct-dash-toggle .toggle-icon{font-size:10px;color:var(--text3);transition:transform 0.2s}
+#acct-dashboard.dash-collapsed #acct-dash-body{display:none}
+#acct-dashboard.dash-collapsed .toggle-icon{transform:rotate(180deg)}
 #calc-body{flex:1;overflow:hidden;display:flex}
 .dash-header{display:flex;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
 .dash-kpi-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
@@ -65,7 +71,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 .ds .ds-v{font-family:var(--font-mono);font-weight:700;font-size:11px}
 /* ── AUTOCOMPLETE ── */
 .ac-wrap{position:relative}
-.ac-list{position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-top:none;border-radius:0 0 6px 6px;box-shadow:0 4px 16px rgba(0,0,0,0.1);z-index:50;max-height:200px;overflow-y:auto;display:none}
+.ac-list{position:fixed;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;box-shadow:0 4px 20px rgba(0,0,0,0.15);z-index:500;max-height:220px;overflow-y:auto;display:none;min-width:280px}
 .ac-list.open{display:block}
 .ac-item{padding:7px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border)}
 .ac-item:last-child{border-bottom:none}
@@ -304,7 +310,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
           <div>
             <label class="lbl">Account Number</label>
             <div class="ac-wrap">
-              <input type="text" id="account-number" style="width:180px" placeholder="e.g. ACC-1042" oninput="onAccountInput(this.value)" autocomplete="off">
+              <input type="text" id="account-number" style="width:180px" placeholder="e.g. ACC-1042" oninput="onAccountInput(this.value)" onblur="setTimeout(()=>{const l=g('acct-suggestions');if(l)l.classList.remove('open');},150)" autocomplete="off">
               <div class="ac-list" id="acct-suggestions"></div>
             </div>
           </div>
@@ -392,16 +398,24 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
     </div>
   </div><!-- /calc-body -->
 
-  <!-- Account Sales Dashboard — stays visible, does not collapse calculator -->
+  <!-- Account Sales Dashboard — collapsible overlay, does not push layout -->
   <div id="acct-dashboard">
-    <div class="dash-header">
-      <div style="font-size:10px;font-weight:700;color:var(--orange);letter-spacing:1.5px;text-transform:uppercase">Account Overview</div>
-      <div id="dash-acct-name" style="font-size:13px;font-weight:700"></div>
-      <div id="dash-period" style="font-size:11px;color:var(--text3)"></div>
+    <div id="acct-dash-toggle" onclick="toggleDashboard()">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="font-size:10px;font-weight:700;color:var(--orange);letter-spacing:1.5px;text-transform:uppercase">Account Overview</div>
+        <div id="dash-acct-name" style="font-size:12px;font-weight:700;color:var(--text)"></div>
+        <div id="dash-period" style="font-size:11px;color:var(--text3)"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div id="dash-summary-mini" style="font-size:11px;color:var(--text2)"></div>
+        <span class="toggle-icon">▲</span>
+      </div>
     </div>
-    <div class="dash-kpi-row" id="dash-kpis"></div>
-    <div style="font-size:9px;color:var(--text3);letter-spacing:2px;font-weight:700;margin-bottom:5px">BY PRODUCT GROUP</div>
-    <div class="dash-group-grid" id="dash-cards"></div>
+    <div id="acct-dash-body">
+      <div class="dash-kpi-row" id="dash-kpis"></div>
+      <div style="font-size:9px;color:var(--text3);letter-spacing:2px;font-weight:700;margin-bottom:5px">BY PRODUCT LINE</div>
+      <div class="dash-group-grid" id="dash-cards"></div>
+    </div>
   </div>
   </div><!-- /calc-wrapper -->
 </div><!-- /calculator-panel -->
@@ -1099,7 +1113,7 @@ function renderLineItems(){
         <div class="ac-wrap">
           <input type="text" placeholder="Search description..." value="${nameVal}" style="width:210px;font-size:12px"
             id="desc-inp-${item.id}"
-            oninput="onLineDescInput(${item.id},this.value)" autocomplete="off">
+            oninput="onLineDescInput(${item.id},this.value)" onblur="setTimeout(()=>{const a=g('desc-ac-'+${item.id});if(a)a.classList.remove('open');},150)" autocomplete="off">
           <div class="ac-list" id="desc-ac-${item.id}"></div>
         </div>
         ${aspHint}
@@ -1138,6 +1152,25 @@ function onLineDescInput(itemId,val){
     <span style="font-weight:600">${p.name}</span>
     <span class="ac-sub">${p.sku}${p.productLine?' · '+p.productLine:''}</span>
   </div>`).join('');
+  // Position using fixed coords from input bounding rect
+  if(inp){
+    const rect=inp.getBoundingClientRect();
+    const spaceBelow=window.innerHeight-rect.bottom;
+    const dropH=Math.min(220, matches.length*38);
+    if(spaceBelow>=dropH){
+      // show below
+      ac.style.top=(rect.bottom+2)+'px';
+      ac.style.left=rect.left+'px';
+      ac.style.width=Math.max(rect.width,300)+'px';
+      ac.style.bottom='auto';
+    } else {
+      // show above
+      ac.style.bottom=(window.innerHeight-rect.top+2)+'px';
+      ac.style.left=rect.left+'px';
+      ac.style.width=Math.max(rect.width,300)+'px';
+      ac.style.top='auto';
+    }
+  }
   ac.classList.add('open');
 }
 
@@ -1260,6 +1293,12 @@ function selectAcct(no,name){
   onAccountInput(no);
 }
 
+function toggleDashboard(){
+  const dash=g('acct-dashboard');
+  if(!dash)return;
+  dash.classList.toggle('dash-collapsed');
+}
+
 function renderDashboard(rows,acctNo){
   const dash=g('acct-dashboard');if(!dash)return;
   dash.classList.add('visible');
@@ -1273,6 +1312,10 @@ function renderDashboard(rows,acctNo){
   const totalCM=rows.reduce((s,r)=>s+(r.cm||0),0);
   const cmPct=totalSales>0?totalCM/totalSales:0;
   const kpis=g('dash-kpis');
+  // Mini summary shown in collapsed header
+  const mini=g('dash-summary-mini');
+  if(mini)mini.textContent=fmtEur(totalSales)+(totalCM?' · CM: '+fmtPct(cmPct):'');
+
   if(kpis)kpis.innerHTML=`
     <div class="dash-kpi"><div class="dash-kpi-l">Total Sales</div><div class="dash-kpi-v t-o">${fmtEur(totalSales)}</div></div>
     <div class="dash-kpi"><div class="dash-kpi-l">Contribution Margin</div><div class="dash-kpi-v" style="color:${marginColor(cmPct)}">${fmtEur(totalCM)} (${fmtPct(cmPct)})</div></div>
