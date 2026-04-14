@@ -316,7 +316,13 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
           </div>
           <div>
             <label class="lbl">Account Name</label>
-            <input type="text" id="account-name" style="width:210px" placeholder="Auto-filled or type...">
+            <div class="ac-wrap">
+              <input type="text" id="account-name" style="width:210px" placeholder="Auto-filled or type..."
+                oninput="onAccountNameInput(this.value)"
+                onblur="setTimeout(()=>{const l=g('acct-name-suggestions');if(l)l.classList.remove('open');},150)"
+                autocomplete="off">
+              <div class="ac-list" id="acct-name-suggestions"></div>
+            </div>
           </div>
           <div id="account-found-badge" style="display:none">
             <span class="acct-badge"><span class="pulse"></span> SALES DATA FOUND</span>
@@ -502,7 +508,16 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
 
 <!-- ════════ SETTINGS ════════ -->
 <div id="settings-panel" class="panel">
-  <div class="sg">
+  <div style="padding:14px 18px 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--bg)">
+    <div style="flex:1">
+      <div style="font-size:13px;font-weight:700;color:var(--text)">Settings &amp; Modifiers</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px">Changes are stored in <em>your</em> browser. Use Export/Import to share settings with your team.</div>
+    </div>
+    <button class="btn btn-secondary btn-sm" onclick="exportSettings()">⬇ Export Settings</button>
+    <button class="btn btn-primary btn-sm" onclick="g('import-settings-file').click()">⬆ Import Settings</button>
+    <input type="file" id="import-settings-file" accept=".json" onchange="importSettings(this)">
+  </div>
+  <div class="sg" style="padding:14px 18px 18px;overflow-y:auto;flex:1">
     <div class="card">
       <div class="card-title ct-yellow">Approval Level Thresholds</div>
       <p style="font-size:12px;color:var(--text2);margin-bottom:12px">Minimum gross margin % to trigger each approval level.</p>
@@ -559,6 +574,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
         <button class="btn btn-primary btn-sm" onclick="addDealType()">ADD</button>
       </div>
     </div>
+  </div>
   </div>
 </div>
 
@@ -1266,6 +1282,26 @@ function onAccountInput(val){
   // Do NOT re-render line items here — avoids collapse
 }
 
+function onAccountNameInput(val){
+  const list=g('acct-name-suggestions');if(!list)return;
+  if(!val.trim()){list.classList.remove('open');return;}
+  const q=val.trim().toUpperCase();
+  const seen=new Set();
+  const matches=salesRows.filter(r=>{
+    const name=(r.accountName||'').toUpperCase();
+    const no=(r.accountNo||'').toUpperCase();
+    if(!name||seen.has(no))return false;
+    if(name.includes(q)){seen.add(no);return true;}
+    return false;
+  }).slice(0,8);
+  if(!matches.length){list.classList.remove('open');return;}
+  list.innerHTML=matches.map(r=>`<div class="ac-item" onclick="selectAcct('${(r.accountNo||'').replace(/'/g,"\\'")}','${(r.accountName||'').replace(/'/g,"\\'")}')">
+    <span style="font-weight:600">${r.accountName}</span>
+    <span class="ac-sub">${r.accountNo}</span>
+  </div>`).join('');
+  list.classList.add('open');
+}
+
 function showAcctSuggestions(val){
   const list=g('acct-suggestions');if(!list)return;
   if(!val.trim()){list.classList.remove('open');return;}
@@ -1750,8 +1786,6 @@ function exportQuotePDF(){
   // ── HEADER BAND ──
   doc.setFillColor(...orange);
   doc.rect(0,0,W,28,'F');
-
-  // Logo text
   doc.setFont('helvetica','bold');
   doc.setFontSize(16);
   doc.setTextColor(...white);
@@ -1760,8 +1794,6 @@ function exportQuotePDF(){
   doc.setFont('helvetica','normal');
   doc.setTextColor(255,220,200);
   doc.text('ROAD MARKING MATERIALS',14,17);
-
-  // Quote label right side
   doc.setFont('helvetica','bold');
   doc.setFontSize(20);
   doc.setTextColor(...white);
@@ -1771,77 +1803,49 @@ function exportQuotePDF(){
   doc.setTextColor(255,220,200);
   doc.text('Ref: '+quoteRef,W-14,20,{align:'right'});
 
-  // ── ORANGE ACCENT LINE ──
+  // ── ACCENT LINE ──
   doc.setFillColor(200,67,6);
   doc.rect(0,28,W,2,'F');
 
   // ── META SECTION ──
   let y=38;
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(10);
-  doc.setTextColor(...dark);
+  doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(...dark);
   doc.text('CUSTOMER',14,y);
   doc.text('DATE & VALIDITY',110,y);
-
   y+=5;
-  doc.setFont('helvetica','normal');
-  doc.setFontSize(10);
-  doc.setTextColor(...dark);
+  doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(...dark);
   if(acctName)doc.text(acctName,14,y);
-  if(acctNo){y+=5;doc.setFontSize(9);doc.setTextColor(...mid);doc.text('Account: '+acctNo,14,y);}
-
+  if(acctNo){y+=5;doc.setFontSize(9);doc.setTextColor(...mid);doc.text('Account No: '+acctNo,14,y);}
   doc.setFontSize(10);doc.setTextColor(...dark);
   doc.text(dateStr,110,y-(acctName?5:0));
   doc.setFontSize(9);doc.setTextColor(...mid);
   doc.text('Valid 30 days from issue',110,y-(acctName?0:-5));
 
-  // Deal name
+  // Deal name bar (no approval shown to customer)
   y+=10;
   doc.setFillColor(...light);
   doc.roundedRect(14,y-5,W-28,10,2,2,'F');
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(10);
-  doc.setTextColor(...orange);
+  doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(...orange);
   doc.text('RE: '+dealName,18,y+1);
-  doc.setFont('helvetica','normal');
-  doc.setFontSize(9);
-  doc.setTextColor(...mid);
-  doc.text(t.appr?t.appr.label:'',W-16,y+1,{align:'right'});
 
   // ── LINE ITEMS TABLE ──
+  // Customer-facing: Item No, Description, Qty, Unit, Unit Price, Total Price
+  // No cost, no margin, no approval
   y+=14;
-  const role=ROLES.find(r=>r.id===activeRole)||ROLES[0];
-  const showCost=role.canSeeCost;
-  const showMargin=role.canSeeMargin;
-
-  // Build table columns dynamically
-  const cols=[];
-  const head=[];
-  head.push('Item No.');
-  head.push('Description');
-  head.push('Qty');
-  head.push('Unit');
-  head.push('List Price');
-  if(showCost)head.push('Cost/unit');
-  head.push('Selling Total');
-  if(showMargin)head.push('Margin');
-
+  const head=['Item No.','Description','Qty','Unit','Unit Price','Total Price'];
   const tableRows=[];
   lineItems.forEach(item=>{
     const r=calcLine(item);
     const prod=products.find(p=>p.id===item.productId);
     if(!prod)return;
-    const row=[
+    tableRows.push([
       prod.sku,
       prod.name,
-      item.qty.toString(),
+      String(item.qty),
       prod.unit,
-      fmtEur(r.list/Math.max(item.qty,1)),
-    ];
-    if(showCost)row.push(fmtEur(prod.costPrice));
-    row.push(fmtEur(r.selling));
-    if(showMargin)row.push(fmtPct(r.margin));
-    tableRows.push(row);
+      fmtEur(r.selling/Math.max(item.qty,1)),
+      fmtEur(r.selling),
+    ]);
   });
 
   if(!tableRows.length){
@@ -1849,83 +1853,77 @@ function exportQuotePDF(){
     doc.text('No products selected.',14,y);
     y+=10;
   } else {
+    // Fixed column widths that prevent text wrapping on short fields
+    const usableW=W-28; // 182mm
+    // Item No=28, Qty=14, Unit=18, UnitPrice=30, Total=30 → Description gets the rest = 62
     doc.autoTable({
       startY:y,
       head:[head],
       body:tableRows,
       theme:'plain',
-      styles:{font:'helvetica',fontSize:9,cellPadding:{top:3,bottom:3,left:3,right:3},textColor:dark,lineColor:[220,224,235],lineWidth:0.2},
-      headStyles:{fillColor:orange,textColor:white,fontStyle:'bold',fontSize:8,cellPadding:{top:4,bottom:4,left:3,right:3}},
+      styles:{
+        font:'helvetica',fontSize:9,
+        cellPadding:{top:3.5,bottom:3.5,left:3,right:3},
+        textColor:dark,lineColor:[220,224,235],lineWidth:0.2,
+        overflow:'linebreak',
+      },
+      headStyles:{
+        fillColor:orange,textColor:white,fontStyle:'bold',fontSize:8,
+        cellPadding:{top:4,bottom:4,left:3,right:3},
+      },
       alternateRowStyles:{fillColor:[250,251,253]},
-      columnStyles:{0:{fontStyle:'bold',cellWidth:25},1:{cellWidth:'auto'},2:{halign:'center',cellWidth:12},3:{halign:'center',cellWidth:14},4:{halign:'right'},5:{halign:'right'}},
+      columnStyles:{
+        0:{cellWidth:28,fontStyle:'bold'},
+        1:{cellWidth:62},
+        2:{cellWidth:14,halign:'center'},
+        3:{cellWidth:18,halign:'center'},
+        4:{cellWidth:30,halign:'right'},
+        5:{cellWidth:30,halign:'right',fontStyle:'bold'},
+      },
       margin:{left:14,right:14},
     });
     y=doc.lastAutoTable.finalY+8;
   }
 
-  // ── PRICING SUMMARY BOX ──
+  // ── TOTAL PRICE BOX (no margin, no internal details) ──
   const boxX=W/2+10, boxW=W-boxX-14;
-  const sumRows=[
-    ['List Price Total',fmtEur(t.tList)],
-    ['Adjustments',(t.totalMod>=1?'+':'')+fmtPct(t.totalMod-1)],
-    ['Volume Discount',(t.vm>=0?'+':'')+fmtPct(t.vm)],
-  ];
-  if(showMargin)sumRows.push(['Gross Margin',fmtPct(t.finM)]);
+  // Only show list subtotal and final price to customer — no % breakdowns
+  const custSumRows=[];
+  if(Math.abs(t.totalMod-1)>0.001||Math.abs(t.vm)>0.001){
+    custSumRows.push(['List Price Total', fmtEur(t.tList)]);
+    custSumRows.push(['Negotiated Discount', fmtEur(t.final-t.tList)]);
+  }
 
-  // Summary card background
+  const totalBoxH=custSumRows.length*7+(custSumRows.length?4:0)+16;
   doc.setFillColor(...light);
-  doc.roundedRect(boxX-2,y-3,boxW+4,sumRows.length*7+18,2,2,'F');
-
+  doc.roundedRect(boxX-2,y-3,boxW+4,totalBoxH,2,2,'F');
   doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(...mid);
-  doc.text('PRICING SUMMARY',boxX,y+2);
-  y+=7;
-
-  sumRows.forEach(([lbl,val])=>{
-    doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(...mid);
-    doc.text(lbl,boxX,y);
-    doc.setFont('helvetica','bold');doc.setTextColor(...dark);
-    doc.text(val,W-16,y,{align:'right'});
-    y+=7;
-  });
-
-  // Total price highlight
+  if(custSumRows.length){
+    doc.text('PRICE BREAKDOWN',boxX,y+2);y+=7;
+    custSumRows.forEach(([lbl,val])=>{
+      doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(...mid);
+      doc.text(lbl,boxX,y);
+      doc.setFont('helvetica','bold');doc.setTextColor(...dark);
+      doc.text(val,W-16,y,{align:'right'});
+      y+=7;
+    });
+    y+=4;
+  }
+  // Total price highlight — full width
   doc.setFillColor(...orange);
   doc.roundedRect(boxX-2,y-4,boxW+4,12,2,2,'F');
   doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(...white);
-  doc.text('TOTAL PRICE',boxX,y+4);
+  doc.text('TOTAL PRICE (excl. VAT)',boxX,y+4);
   doc.setFontSize(13);doc.text(fmtEur(t.final),W-16,y+4,{align:'right'});
   y+=14;
 
-  // Modifier summary (left side of summary)
-  const modX=14, modW=W/2-20;
-  const ct=customerTypes.find(c=>c.id===customerType)||customerTypes[0];
-  const dt=dealTypes.find(d=>d.id===dealType)||dealTypes[0];
-  const aoActive=addOns.filter(a=>selectedAddOns.includes(a.id));
-  const modY=y-14-sumRows.length*7-7;
-
-  doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(...mid);
-  doc.text('APPLIED MODIFIERS',modX,modY);
-  let my=modY+6;
-  const modLines=[
-    `Customer: ${ct.label} (${ct.modifier>=0?'+':''}${fmtPctRaw(ct.modifier)}%)`,
-    `Deal: ${dt.label} (${dt.modifier>=0?'+':''}${fmtPctRaw(dt.modifier)}%)`,
-    ...aoActive.map(a=>`${a.label} (${a.modifier>=0?'+':''}${fmtPctRaw(a.modifier)}%)`),
-    t.vt?`Volume tier: ${t.vt.label} (${t.vm>=0?'+':''}${fmtPctRaw(t.vm)}%)`:'',
-  ].filter(Boolean);
-  doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.setTextColor(...dark);
-  modLines.forEach(line=>{doc.text('• '+line,modX,my);my+=5;});
-
-  y=Math.max(y,my)+4;
-
   // Notes
   if(notes){
-    doc.setDrawColor(...light[0],...light[1],...light[2]);
-    doc.setLineWidth(0.5);
-    doc.line(14,y,W-14,y);
-    y+=6;
+    y+=4;
+    doc.setDrawColor(220,224,235);doc.setLineWidth(0.4);
+    doc.line(14,y,W-14,y);y+=7;
     doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(...mid);
-    doc.text('NOTES / REMARKS',14,y);
-    y+=5;
+    doc.text('NOTES / REMARKS',14,y);y+=5;
     doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(...dark);
     const splitNotes=doc.splitTextToSize(notes,W-28);
     doc.text(splitNotes,14,y);
@@ -1934,23 +1932,59 @@ function exportQuotePDF(){
 
   // ── FOOTER ──
   const footY=H-20;
-  doc.setFillColor(...orange);
-  doc.rect(0,footY-2,W,0.5,'F');
-  doc.setFillColor(...light);
-  doc.rect(0,footY-1,W,H-(footY-1),'F');
-
+  doc.setFillColor(...orange);doc.rect(0,footY-2,W,0.5,'F');
+  doc.setFillColor(...light);doc.rect(0,footY-1,W,H-(footY-1),'F');
   doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(...orange);
   doc.text('GEVEKO MARKINGS',14,footY+5);
-  doc.setFont('helvetica','normal');doc.setTextColor(...mid);
-  doc.setFontSize(7.5);
+  doc.setFont('helvetica','normal');doc.setTextColor(...mid);doc.setFontSize(7.5);
   doc.text('www.geveko-markings.com',14,footY+10);
   doc.text('This document is confidential and intended solely for the named customer.',W/2,footY+5,{align:'center'});
-  doc.text('Prices are subject to standard terms & conditions. Geveko Markings reserves the right to amend.',W/2,footY+10,{align:'center'});
+  doc.text('Prices exclude VAT and are subject to standard terms & conditions.',W/2,footY+10,{align:'center'});
   doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(...mid);
-  doc.text('Page 1 / 1',W-14,footY+5,{align:'right'});
-  doc.text(quoteRef,W-14,footY+10,{align:'right'});
+  doc.text(quoteRef,W-14,footY+5,{align:'right'});
+  doc.text(dateStr,W-14,footY+10,{align:'right'});
 
   doc.save(dealName.replace(/\s+/g,'-')+'-geveko-quote.pdf');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SETTINGS EXPORT / IMPORT
+// ═══════════════════════════════════════════════════════════════════
+function exportSettings(){
+  const config={
+    products, approvalLevels, customerTypes, dealTypes, volumeTiers, addOns,
+    _exported: new Date().toISOString(),
+    _version: 2
+  };
+  const blob=new Blob([JSON.stringify(config,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='geveko-settings-'+new Date().toISOString().slice(0,10)+'.json';
+  a.click();
+}
+
+function importSettings(input){
+  const file=input.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const cfg=JSON.parse(e.target.result);
+      let applied=[];
+      if(cfg.products&&cfg.products.length){products=cfg.products;applied.push('products ('+cfg.products.length+')');}
+      if(cfg.approvalLevels&&cfg.approvalLevels.length){approvalLevels=cfg.approvalLevels;applied.push('approval levels');}
+      if(cfg.customerTypes&&cfg.customerTypes.length){customerTypes=cfg.customerTypes;applied.push('customer types');}
+      if(cfg.dealTypes&&cfg.dealTypes.length){dealTypes=cfg.dealTypes;applied.push('deal types');}
+      if(cfg.volumeTiers&&cfg.volumeTiers.length){volumeTiers=cfg.volumeTiers;applied.push('volume tiers');}
+      if(cfg.addOns&&cfg.addOns.length){addOns=cfg.addOns;applied.push('add-ons');}
+      saveState();
+      renderSettings();renderProductTable();renderCalculator();
+      alert('✅ Settings imported: '+applied.join(', ')+(cfg._exported?'\n\nExported: '+cfg._exported:''));
+    }catch(err){
+      alert('❌ Could not read settings file. Make sure it is a valid Geveko settings export.');
+    }
+    input.value='';
+  };
+  reader.readAsText(file);
 }
 
 // ═══════════════════════════════════════════════════════════════════
