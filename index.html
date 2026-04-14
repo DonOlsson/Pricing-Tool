@@ -43,12 +43,14 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 .panel{display:none;width:100%;height:100%;overflow:hidden}
 .panel.active{display:flex}
 #calc-panel{flex-direction:column}
-#calc-body{display:flex;flex:1;overflow:hidden;min-height:0}
+/* calc-body defined above */
 #calc-left{flex:1;overflow-y:auto;padding:14px 14px 14px 18px;display:flex;flex-direction:column;gap:10px;background:var(--bg)}
 #calc-right{width:300px;flex-shrink:0;border-left:1px solid var(--border);overflow-y:auto;padding:14px;background:var(--bg2);display:flex;flex-direction:column;gap:8px}
 /* ── DASHBOARD ── */
-#acct-dashboard{flex-shrink:0;border-top:2px solid var(--orange);background:var(--bg2);padding:10px 18px;display:none;max-height:220px;overflow-y:auto}
+#calc-wrapper{position:relative;flex:1;overflow:hidden;display:flex;flex-direction:column}
+#acct-dashboard{position:absolute;bottom:0;left:0;right:0;z-index:10;border-top:2px solid var(--orange);background:var(--bg2);padding:10px 18px;max-height:200px;overflow-y:auto;display:none;box-shadow:0 -4px 20px rgba(0,0,0,0.10)}
 #acct-dashboard.visible{display:block}
+#calc-body{flex:1;overflow:hidden;display:flex}
 .dash-header{display:flex;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
 .dash-kpi-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
 .dash-kpi{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:7px 13px;min-width:130px}
@@ -231,16 +233,38 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
 </head>
 <body>
 
-<!-- PASSWORD GATE -->
-<div id="pw-gate">
-  <div id="pw-box">
-    <div class="pw-logo">GEVEKO MARKINGS</div>
-    <div class="pw-sub">Pricing Tool — Restricted Access</div>
-    <label class="pw-label" for="pw-input">Enter Password</label>
-    <input type="password" id="pw-input" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkPw()">
-    <button id="pw-submit" onclick="checkPw()">ENTER →</button>
-    <div id="pw-error"></div>
-    <div class="pw-hint">Contact your Pricing Manager for access.</div>
+<!-- LOGIN PAGE -->
+<div id="login-page">
+  <div id="login-left">
+    <div class="ll-brand">Geveko Markings</div>
+    <div class="ll-title">Pricing &amp;<br><span>Deal Management</span><br>Tool</div>
+    <div class="ll-desc">Streamline your pricing decisions with real-time margin visibility, customer analytics, and professional quote generation.</div>
+    <div class="ll-features">
+      <div class="ll-feat"><div class="ll-feat-dot"></div>Live margin &amp; approval tracking</div>
+      <div class="ll-feat"><div class="ll-feat-dot"></div>Customer sales history dashboard</div>
+      <div class="ll-feat"><div class="ll-feat-dot"></div>Professional PDF quote export</div>
+      <div class="ll-feat"><div class="ll-feat-dot"></div>Role-based access control</div>
+    </div>
+    <div class="ll-copy">© 2026 Geveko Markings · Confidential Internal Tool</div>
+  </div>
+  <div id="login-right">
+    <div class="login-box">
+      <div class="login-logo">Geveko Markings</div>
+      <div class="login-sub">Pricing Tool</div>
+      <div class="login-heading">Welcome back</div>
+      <div class="login-hint">Sign in with your company credentials</div>
+      <div class="login-field">
+        <label class="login-lbl" for="login-email">Email Address</label>
+        <input class="login-inp" type="email" id="login-email" placeholder="you@geveko.com" autocomplete="email" onkeydown="if(event.key==='Enter')g('login-password').focus()">
+      </div>
+      <div class="login-field">
+        <label class="login-lbl" for="login-password">Password</label>
+        <input class="login-inp" type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+      </div>
+      <button id="login-submit" onclick="doLogin()">SIGN IN →</button>
+      <div id="login-error"></div>
+      <div class="login-footer">Access restricted to authorised Geveko personnel.<br>Contact your Pricing Manager for access.</div>
+    </div>
   </div>
 </div>
 
@@ -271,6 +295,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
 
 <!-- ════════ CALCULATOR ════════ -->
 <div id="calculator-panel" class="panel active">
+  <div id="calc-wrapper">
   <div id="calc-body">
     <div id="calc-left">
       <!-- Account -->
@@ -378,6 +403,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
     <div style="font-size:9px;color:var(--text3);letter-spacing:2px;font-weight:700;margin-bottom:5px">BY PRODUCT GROUP</div>
     <div class="dash-group-grid" id="dash-cards"></div>
   </div>
+  </div><!-- /calc-wrapper -->
 </div><!-- /calculator-panel -->
 
 <!-- ════════ SALES ════════ -->
@@ -670,37 +696,86 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
 
 <script>
 // ═══════════════════════════════════════════════════════════════════
-// PASSWORD
+// LOGIN / AUTH
 // ═══════════════════════════════════════════════════════════════════
-const PASSWORD = "geveko2024";
-const SESSION_KEY = "geveko_auth";
+const SYSTEM_PASSWORD = "Geveko2026!";
+const SESSION_KEY = "geveko_auth_v2";
 
-function checkPw(){
-  var val=document.getElementById('pw-input').value;
-  var errEl=document.getElementById('pw-error');
-  var inp=document.getElementById('pw-input');
-  if(val===PASSWORD){
-    sessionStorage.setItem(SESSION_KEY,"1");
-    document.getElementById('pw-gate').style.display='none';
-    document.getElementById('app').style.display='flex';
-    errEl.textContent='';
-  } else {
-    errEl.textContent='Incorrect password. Please try again.';
-    inp.value='';
+// Stores the currently logged-in user object during the session
+let currentUser = null;
+
+function doLogin(){
+  const email = (g('login-email')?.value||'').trim().toLowerCase();
+  const password = g('login-password')?.value||'';
+  const errEl = g('login-error');
+
+  if(!email){errEl.textContent='Please enter your email address.';return;}
+  if(password !== SYSTEM_PASSWORD){errEl.textContent='Incorrect password. Please try again.';g('login-password').value='';return;}
+
+  // Check user exists in appUsers list
+  const user = appUsers.find(u=>(u.email||'').toLowerCase()===email);
+  if(!user){
+    errEl.textContent='This email address is not authorised. Contact your Pricing Manager.';
+    g('login-password').value='';
+    return;
   }
+
+  // Successful login
+  currentUser = user;
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify({email:user.email, role:user.role}));
+  showApp(user.role);
+  errEl.textContent='';
+}
+
+function showApp(roleId){
+  const lp = g('login-page');
+  if(lp) lp.style.display='none';
+  const app = g('app');
+  if(app) app.style.display='flex';
+  applyRole(roleId);
+  renderCalculator();
+}
+
+function doLogout(){
+  sessionStorage.removeItem(SESSION_KEY);
+  currentUser = null;
+  const app = g('app');
+  if(app) app.style.display='none';
+  const lp = g('login-page');
+  if(lp) lp.style.display='flex';
+  // Clear login fields
+  const em=g('login-email'); if(em) em.value='';
+  const pw=g('login-password'); if(pw) pw.value='';
+  const er=g('login-error'); if(er) er.textContent='';
 }
 
 (function(){
-  if(sessionStorage.getItem(SESSION_KEY)==="1"){
-    document.getElementById('pw-gate').style.display='none';
-    document.getElementById('app').style.display='flex';
-  } else {
-    document.addEventListener('DOMContentLoaded',function(){
-      var app=document.getElementById('app');
-      if(app)app.style.display='none';
-      setTimeout(function(){var i=document.getElementById('pw-input');if(i)i.focus();},100);
-    });
-  }
+  // Restore session if still valid
+  try{
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if(raw){
+      const sess = JSON.parse(raw);
+      // Verify user still exists in appUsers (loaded after this IIFE in loadState)
+      document.addEventListener('DOMContentLoaded', function(){
+        const user = appUsers.find(u=>(u.email||'').toLowerCase()===(sess.email||'').toLowerCase());
+        if(user){
+          currentUser = user;
+          showApp(sess.role||user.role);
+        } else {
+          // User was removed — force re-login
+          sessionStorage.removeItem(SESSION_KEY);
+          const app=g('app'); if(app)app.style.display='none';
+          setTimeout(()=>{const e=g('login-email');if(e)e.focus();},100);
+        }
+      });
+      return;
+    }
+  } catch(e){}
+  // No session — hide app, show login
+  document.addEventListener('DOMContentLoaded', function(){
+    const app=g('app'); if(app)app.style.display='none';
+    setTimeout(()=>{const e=g('login-email');if(e)e.focus();},100);
+  });
 })();
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1188,7 +1263,8 @@ function renderDashboard(rows,acctNo){
   ss('dash-acct-name','textContent',acctName);
   const years=[...new Set(rows.map(r=>r.year).filter(Boolean))].sort().join(', ');
   ss('dash-period','textContent',years?'('+years+')':'');
-  // KPIs
+
+  // KPIs — totals across all rows for this account
   const totalSales=rows.reduce((s,r)=>s+(r.sales||0),0);
   const totalCM=rows.reduce((s,r)=>s+(r.cm||0),0);
   const cmPct=totalSales>0?totalCM/totalSales:0;
@@ -1196,29 +1272,33 @@ function renderDashboard(rows,acctNo){
   if(kpis)kpis.innerHTML=`
     <div class="dash-kpi"><div class="dash-kpi-l">Total Sales</div><div class="dash-kpi-v t-o">${fmtEur(totalSales)}</div></div>
     <div class="dash-kpi"><div class="dash-kpi-l">Contribution Margin</div><div class="dash-kpi-v" style="color:${marginColor(cmPct)}">${fmtEur(totalCM)} (${fmtPct(cmPct)})</div></div>
-    <div class="dash-kpi"><div class="dash-kpi-l">Product Lines</div><div class="dash-kpi-v">${[...new Set(rows.map(r=>r.productLine).filter(Boolean))].length}</div></div>
-    <div class="dash-kpi"><div class="dash-kpi-l">SKUs</div><div class="dash-kpi-v">${[...new Set(rows.map(r=>r.itemNumber).filter(Boolean))].length}</div></div>
+    <div class="dash-kpi"><div class="dash-kpi-l">Product Lines</div><div class="dash-kpi-v">${[...new Set(rows.map(r=>r.productLine).filter(Boolean))].length||'—'}</div></div>
+    <div class="dash-kpi"><div class="dash-kpi-l">SKUs</div><div class="dash-kpi-v">${[...new Set(rows.map(r=>r.itemNumber).filter(Boolean))].length||'—'}</div></div>
   `;
-  // Group by Product Line > Item Group
-  const byGroup={};
+
+  // Summarize by Product Line — all rows under same product line are summed together
+  const byLine={};
   rows.forEach(r=>{
-    const pl=r.productLine||'Other';
-    const ig=r.itemGroup||'General';
-    const key=pl+'__'+ig;
-    if(!byGroup[key])byGroup[key]={productLine:pl,itemGroup:ig,sales:0,cm:0,skus:new Set()};
-    byGroup[key].sales+=(r.sales||0);
-    byGroup[key].cm+=(r.cm||0);
-    if(r.itemNumber)byGroup[key].skus.add(r.itemNumber);
+    const pl=r.productLine||'Unassigned';
+    if(!byLine[pl])byLine[pl]={productLine:pl,sales:0,cm:0,skus:new Set(),itemGroups:new Set()};
+    byLine[pl].sales+=(r.sales||0);
+    byLine[pl].cm+=(r.cm||0);
+    if(r.itemNumber)byLine[pl].skus.add(r.itemNumber);
+    if(r.itemGroup)byLine[pl].itemGroups.add(r.itemGroup);
   });
+
   const cards=g('dash-cards');if(!cards)return;
-  cards.innerHTML=Object.values(byGroup).sort((a,b)=>b.sales-a.sales).map(g=>{
-    const gCmPct=g.sales>0?g.cm/g.sales:0;
+  cards.innerHTML=Object.values(byLine).sort((a,b)=>b.sales-a.sales).map(pl=>{
+    const plCmPct=pl.sales>0?pl.cm/pl.sales:0;
+    const shareOfTotal=totalSales>0?pl.sales/totalSales:0;
+    const groups=[...pl.itemGroups].slice(0,3).join(', ')+(pl.itemGroups.size>3?' …':'');
     return `<div class="dash-group-card">
-      <div class="dash-group-name">${g.productLine}</div>
-      <div class="dash-group-sub">${g.itemGroup} · ${g.skus.size} SKU${g.skus.size!==1?'s':''}</div>
+      <div class="dash-group-name">${pl.productLine}</div>
+      <div class="dash-group-sub">${pl.skus.size} SKU${pl.skus.size!==1?'s':''} · ${fmtPct(shareOfTotal)} of total${groups?' · '+groups:''}</div>
       <div class="dash-stats">
-        <div class="ds"><div class="ds-l">Sales</div><div class="ds-v t-o">${fmtEur(g.sales)}</div></div>
-        <div class="ds"><div class="ds-l">CM</div><div class="ds-v" style="color:${marginColor(gCmPct)}">${fmtPct(gCmPct)}</div></div>
+        <div class="ds"><div class="ds-l">Total Sales</div><div class="ds-v t-o">${fmtEur(pl.sales)}</div></div>
+        <div class="ds"><div class="ds-l">CM %</div><div class="ds-v" style="color:${marginColor(plCmPct)}">${fmtPct(plCmPct)}</div></div>
+        ${pl.cm>0?`<div class="ds"><div class="ds-l">CM €</div><div class="ds-v">${fmtEur(pl.cm)}</div></div>`:''}
       </div>
     </div>`;
   }).join('');
