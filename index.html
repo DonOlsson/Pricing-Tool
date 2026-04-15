@@ -1041,7 +1041,8 @@ function showApp(roleId){
   var dash=g('acct-dashboard');if(dash)dash.classList.remove('visible');
   var badge=g('account-found-badge');if(badge)badge.style.display='none';
   applyRole(roleId);
-  renderCalculator();
+  // Always land on the calculator tab, clean
+  setTab('calculator');
 }
 
 function emergencyUnlock(){
@@ -2501,6 +2502,44 @@ function sendApprovalEmail(quote){
   window.open('mailto:'+approver.email+'?subject='+subject+'&body='+body);
 }
 
+function denyQuote(id){
+  var q=quoteHistory.find(function(x){return x.id===id;});
+  if(!q)return;
+  var reason=prompt('Enter reason for denial (will be sent to '+q.createdBy+'):','') || '';
+  quoteHistory=quoteHistory.map(function(x){
+    if(x.id!==id)return x;
+    return Object.assign({},x,{status:'denied',deniedBy:currentUser?currentUser.name:'',deniedDate:new Date().toISOString(),denialReason:reason});
+  });
+  saveState();renderQuotesTable();
+  // Email creator
+  var creator=appUsers.find(function(u){return u.email===q.createdByEmail;});
+  if(creator&&creator.email){
+    var nl='%0A';
+    var lines=[
+      'Hi '+creator.name+',','',
+      'Your quote has been reviewed and was not approved.','',
+      'Reference: '+q.ref,
+      'Deal: '+q.dealName,
+      'Account: '+(q.acctName||q.acctNo||''),
+      'Total Price: '+fmtEur(q.totalPrice),
+      'Gross Margin: '+fmtPct(q.margin),
+      'Reviewed by: '+(currentUser?currentUser.name:''),
+      'Date: '+new Date().toLocaleDateString('en-GB'),
+      ''
+    ];
+    if(reason){
+      lines.push('Reason for denial:');
+      lines.push(reason);
+      lines.push('');
+    }
+    lines.push('Please revise the pricing and resubmit for approval.');
+    lines.push('','This is an automated notification from the Geveko Pricing Tool.');
+    var subject=encodeURIComponent('Quote Denied: '+q.dealName+' ('+q.ref+')');
+    var body=lines.map(function(l){return encodeURIComponent(l);}).join(nl);
+    window.open('mailto:'+creator.email+'?subject='+subject+'&body='+body);
+  }
+}
+
 function approveQuote(id){
   if(!currentUser){return;}
   var q=quoteHistory.find(function(x){return x.id===id;});
@@ -2625,20 +2664,34 @@ function renderQuotesTable(){
     tbody.innerHTML=`<tr><td colspan="11" style="text-align:center;color:var(--text3);padding:28px">No quotes saved yet. Use "Save Current Quote" from the Calculator tab.</td></tr>`;
     return;
   }
-  const statusColors={draft:'var(--text3)',pending:'var(--yellow)',approved:'var(--green)',sent:'var(--blue)',accepted:'#1a9e6e',declined:'var(--red)'};
-  const statusLabels={draft:'Draft',pending:'⏳ Pending',approved:'✓ Approved',sent:'📤 Sent',accepted:'✅ Accepted',declined:'❌ Declined'};
+  const statusColors={draft:'var(--text3)',pending:'var(--yellow)',approved:'var(--green)',sent:'var(--blue)',accepted:'#1a9e6e',declined:'var(--red)',denied:'var(--red)'};
+  const statusLabels={draft:'Draft',pending:'⏳ Pending',approved:'✓ Approved',sent:'📤 Sent',accepted:'✅ Accepted',declined:'❌ Declined',denied:'🚫 Denied'};
   tbody.innerHTML=filtered.map(q=>{
     const sc=statusColors[q.status]||'var(--text3)';
     const sl=statusLabels[q.status]||q.status;
-    const canApprove=q.status==='pending'&&(
-      activeRole==='pricing_mgr'||
-      activeRole==='sales_director'||
-      (activeRole==='sales_lead'&&(
-        // Sales lead can approve their team's quotes
-        q.createdByEmail===(currentUser?.email)||
-        appUsers.find(function(u){return u.email===q.createdByEmail&&u.reportsTo===currentUser?.email;})
-      ))
+    // Approval hierarchy: who can approve based on required level
+    // mgr level -> sales_lead+ can approve (but NOT the creator themselves)
+    // dir level -> sales_director+ can approve
+    // exec level -> pricing_mgr only
+    var apprLevelId='auto';
+    var apprLevelMatch=approvalLevels.find(function(a){return a.label===q.approvalRequired;});
+    if(apprLevelMatch)apprLevelId=apprLevelMatch.id;
+    var isOwnDeal=q.createdByEmail===(currentUser?currentUser.email:'');
+    var isTeamDeal=!!appUsers.find(function(u){return u.email===q.createdByEmail&&u.reportsTo===(currentUser?currentUser.email:'');});
+    // Approval rules:
+    // - Sales Lead: can approve 'auto' or 'mgr' level (they ARE the manager layer)
+    //   for their own deals AND team members' deals. Cannot approve dir/exec level.
+    // - Sales Director: can approve 'auto', 'mgr', 'dir' level. Cannot approve exec.
+    // - Pricing Manager: can approve anything, including own team's deals.
+    // - Nobody can approve their own deal if it requires director level or above.
+    var canApprove=q.status==='pending'&&(
+      (activeRole==='pricing_mgr'&&!isOwnDeal)||(
+        activeRole==='sales_director'&&!isOwnDeal&&apprLevelId!=='exec'
+      )||(
+        activeRole==='sales_lead'&&(apprLevelId==='auto'||apprLevelId==='mgr')&&(isOwnDeal||isTeamDeal)
+      )
     );
+    var canDeny=canApprove;  // Same permissions to deny as to approve
     // Delete: admin deletes all; sales lead deletes own + team
     const canDelete=activeRole==='pricing_mgr'||(
       activeRole==='sales_lead'&&(
@@ -2660,7 +2713,8 @@ function renderQuotesTable(){
       <td><span style="font-size:11px;font-weight:700;color:${sc}">${sl}</span></td>
       <td>
         <div class="flex g6" style="flex-wrap:wrap">
-          ${canApprove?`<button class="btn btn-primary btn-xs" onclick="approveQuote(${q.id})">Approve</button>`:''}
+          ${canApprove?`<button class="btn btn-primary btn-xs" style="background:var(--green);color:#fff" onclick="approveQuote(${q.id})">✓ Approve</button>`:''}
+          ${canDeny?`<button class="btn btn-danger btn-xs" onclick="denyQuote(${q.id})">✗ Deny</button>`:''}
           ${q.status==='approved'?`<button class="btn btn-secondary btn-xs" onclick="markSent(${q.id})">Mark Sent</button>`:''}
           ${canSetOutcome?`
             <button class="btn btn-xs" style="background:var(--green-lt);color:var(--green);border:1px solid #b0e0d0" onclick="setOutcome(${q.id},'accepted')">✓ Won</button>
