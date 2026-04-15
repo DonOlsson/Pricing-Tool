@@ -178,12 +178,13 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
 .dash-tooltip{
   position:fixed;z-index:9999;
   background:#1a1e28;color:#fff;
-  border-radius:8px;padding:12px 14px;
-  font-size:11px;line-height:1.6;
-  max-width:340px;min-width:260px;
+  border-radius:8px;padding:14px 16px;
+  font-size:11px;line-height:1.7;
+  max-width:560px;min-width:480px;
   box-shadow:0 8px 30px rgba(0,0,0,0.25);
   pointer-events:none;
   opacity:0;transition:opacity 0.15s;
+  white-space:nowrap;
 }
 .dash-tooltip.visible{opacity:1;}
 .dash-tooltip table{width:100%;border-collapse:collapse;}
@@ -240,6 +241,9 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
 /* Admin-only tabs */
 .admin-tab{display:none}
 .role-is-admin .admin-tab{display:inline-flex}
+/* Pricing Manager only tabs */
+.pricing-only-tab{display:none}
+.role-is-pricing-mgr .pricing-only-tab{display:inline-flex}
 </style>
 
 <!-- PASSWORD GATE STYLES -->
@@ -426,15 +430,16 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
     <button class="tab-btn active" onclick="setTab('calculator')">Calculator</button>
     <button class="tab-btn" onclick="setTab('sales')">Sales</button>
     <button class="tab-btn admin-tab" onclick="setTab('products')">Products</button>
-    <button class="tab-btn admin-tab" onclick="setTab('settings')">Settings</button>
-    <button class="tab-btn admin-tab" onclick="setTab('access')">Access</button>
-    <button class="tab-btn admin-tab" onclick="setTab('users')">Users</button>
+    <button class="tab-btn pricing-only-tab" onclick="setTab('settings')">Settings</button>
+    <button class="tab-btn pricing-only-tab" onclick="setTab('access')">Access</button>
+    <button class="tab-btn pricing-only-tab" onclick="setTab('users')">Users</button>
     <button class="tab-btn" onclick="setTab('quotes')">Quotes</button>
   </div>
   <div class="topbar-right">
-    <input type="text" id="deal-name-input" value="New Deal" placeholder="Deal name...">
     <div id="approval-tag-top" class="tag" style="padding:4px 12px;font-size:10px;font-weight:700;letter-spacing:1px"></div>
     <div class="role-badge" id="role-badge-top">👤 Sales Rep</div>
+    <button class="btn btn-secondary btn-sm" onclick="createNewDeal()" title="Start a fresh calculator">＋ New Deal</button>
+    <button class="btn btn-ghost btn-sm" onclick="doLogout()" title="Sign out">⏻ Sign Out</button>
   </div>
 </div>
 
@@ -446,6 +451,19 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
   <div id="calc-wrapper">
   <div id="calc-body">
     <div id="calc-left">
+      <!-- Deal Name -->
+      <div class="card" style="background:var(--orange-lt);border-color:var(--orange-mid)">
+        <div class="fc g10" style="align-items:center">
+          <div style="flex:1">
+            <label class="lbl" style="color:var(--orange)">Deal Name <span style="color:var(--red)">*</span></label>
+            <input type="text" id="deal-name-input" placeholder="Enter deal name..." 
+              style="width:100%;font-size:16px;font-weight:700;background:transparent;border-color:var(--orange-mid);color:var(--text)"
+              oninput="onDealNameInput(this.value)">
+            <div id="deal-name-error" style="font-size:11px;color:var(--red);margin-top:3px;display:none">Deal name is required before saving or exporting.</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Account -->
       <div class="card">
         <div class="fc g10" style="flex-wrap:wrap">
@@ -542,7 +560,13 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
         <div class="card-title" style="margin-bottom:8px">Active Modifiers</div>
         <div id="mod-breakdown"></div>
       </div>
-      <button class="btn btn-primary w100 mt8" onclick="exportQuotePDF()">📄 EXPORT QUOTE PDF ↗</button>
+      <div class="flex g6 mt8" style="flex-direction:column">
+        <div class="flex g6">
+          <button class="btn btn-secondary" style="flex:1" onclick="saveDeal()">💾 Save Deal</button>
+          <button class="btn btn-primary" style="flex:1" onclick="exportAndSave()">📄 Export PDF</button>
+        </div>
+        <button class="btn w100" style="background:#6040c8;color:#fff" onclick="requestApproval()">✉ Get Approval</button>
+      </div>
     </div>
   </div><!-- /calc-body -->
 
@@ -587,6 +611,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
             <th>Account No.</th>
             <th>Account Name</th>
             <th>Sales (€)</th>
+            <th>Qty</th>
             <th>Contribution Margin</th>
             <th>Currency</th>
             <th>Year</th>
@@ -741,19 +766,33 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
     </div>
     <div id="unlock-result" style="font-size:12px;margin-top:8px;color:var(--green)"></div>
   </div>
-  <div class="card" style="margin:18px;max-width:700px">
+  <div class="card" style="margin:18px 18px 0;max-width:900px">
+    <div class="fc g10" style="flex-wrap:wrap;align-items:center">
+      <div class="card-title" style="margin:0;flex:1">User Management</div>
+      <button class="btn btn-secondary btn-sm" onclick="downloadUserTemplate()">⬇ User Template</button>
+      <button class="btn btn-primary btn-sm" onclick="g('user-bulk-file').click()">⬆ Bulk Import Users</button>
+      <input type="file" id="user-bulk-file" accept=".xlsx,.xls,.csv" onchange="bulkImportUsers(this)">
+    </div>
+  </div>
+  <div class="card" style="margin:8px 18px 0;max-width:900px">
     <div class="card-title ct-purple">Add User</div>
-    <div style="display:grid;grid-template-columns:2fr 1fr 2fr 1fr auto;gap:10px;align-items:end">
+    <div style="display:grid;grid-template-columns:2fr 1fr 2fr 1fr 2fr auto;gap:10px;align-items:end">
       <div><label class="lbl">Full Name</label><input type="text" id="uf-name" class="w100" placeholder="Jane Smith" style="font-size:13px"></div>
       <div><label class="lbl">Position</label><input type="text" id="uf-position" class="w100" placeholder="e.g. Sales Rep" style="font-size:13px"></div>
       <div><label class="lbl">Email Address</label><input type="email" id="uf-email" class="w100" placeholder="jane@geveko.com" style="font-size:13px"></div>
       <div>
         <label class="lbl">Role</label>
-        <select id="uf-role" style="font-size:13px;width:100%">
+        <select id="uf-role" style="font-size:13px;width:100%" onchange="renderReportsToOptions()">
           <option value="sales_rep">Sales Rep</option>
           <option value="sales_lead">Sales Lead</option>
           <option value="sales_director">Sales Director</option>
           <option value="pricing_mgr">Admin (Pricing Mgr)</option>
+        </select>
+      </div>
+      <div>
+        <label class="lbl">Reports To</label>
+        <select id="uf-reports-to" style="font-size:13px;width:100%">
+          <option value="">— None —</option>
         </select>
       </div>
       <div style="display:flex;gap:6px;align-items:flex-end">
@@ -767,7 +806,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
     <div style="overflow:auto;flex:1">
       <table class="dt">
         <thead><tr>
-          <th>Name</th><th>Position</th><th>Email</th><th>Role</th><th>Actions</th>
+          <th>Name</th><th>Position</th><th>Email</th><th>Role</th><th>Reports To</th><th>Actions</th>
         </tr></thead>
         <tbody id="users-table-body"></tbody>
       </table>
@@ -797,7 +836,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
         <option value="declined">Customer Declined</option>
       </select>
       <input type="text" id="qf-search" placeholder="Search account or deal..." style="width:180px;font-size:12px" oninput="renderQuotesTable()">
-      <button class="btn btn-primary btn-sm" onclick="saveCurrentQuote()">💾 Save Current Quote</button>
+
     </div>
     <!-- Table -->
     <div class="card" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
@@ -1216,13 +1255,18 @@ function applyRole(roleId){
   } else {
     body.classList.remove('role-no-cost');
   }
-  // Admin tabs visibility
+  // Admin tabs visibility (Products: all admins; Settings/Access/Users: pricing_mgr only)
   const tabsEl=g('main-tabs');
   if(tabsEl){
     if(role.isAdmin){
       tabsEl.classList.add('role-is-admin');
     } else {
       tabsEl.classList.remove('role-is-admin');
+    }
+    if(activeRole==='pricing_mgr'){
+      tabsEl.classList.add('role-is-pricing-mgr');
+    } else {
+      tabsEl.classList.remove('role-is-pricing-mgr');
     }
   }
   const badge=g('role-badge-top');
@@ -1257,11 +1301,13 @@ function renderUsersTable(){
   }
   tbody.innerHTML=appUsers.map(u=>{
     const role=ROLES.find(r=>r.id===u.role)||ROLES[0];
+    const mgr=u.reportsTo?appUsers.find(x=>x.email===u.reportsTo):null;
     return `<tr>
       <td style="font-weight:600">${u.name}</td>
       <td>${u.position}</td>
       <td style="color:var(--blue)">${u.email}</td>
       <td><span style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;background:${role.bg};color:${role.color}">${role.icon} ${role.label}</span></td>
+      <td style="font-size:12px;color:var(--text2)">${mgr?mgr.name:'—'}</td>
       <td><div class="flex g6">
         <button class="btn btn-secondary btn-sm" onclick="editUser(${u.id})">EDIT</button>
         <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id})">DEL</button>
@@ -1275,25 +1321,83 @@ function saveUser(){
   const position=g('uf-position').value.trim();
   const email=g('uf-email').value.trim();
   const role=g('uf-role').value;
+  const reportsTo=g('uf-reports-to')?.value||'';
   const editId=parseInt(g('uf-edit-id').value)||null;
   if(!name||!email){alert('Name and email are required.');return;}
   if(editId){
-    appUsers=appUsers.map(u=>u.id===editId?{...u,name,position,email,role}:u);
+    appUsers=appUsers.map(u=>u.id===editId?{...u,name,position,email,role,reportsTo}:u);
   } else {
-    appUsers.push({id:Date.now(),name,position,email,role});
+    appUsers.push({id:Date.now(),name,position,email,role,reportsTo});
   }
   cancelEditUser();renderUsersTable();saveState();
 }
 
+function renderReportsToOptions(){
+  const sel=g('uf-reports-to');if(!sel)return;
+  const role=g('uf-role')?.value||'';
+  // Sales reps report to sales leads; sales leads report to directors/managers
+  const eligibleRoles=role==='sales_rep'?['sales_lead','sales_director','pricing_mgr']:
+                       role==='sales_lead'?['sales_director','pricing_mgr']:
+                       role==='sales_director'?['pricing_mgr']:[];
+  const eligible=appUsers.filter(u=>eligibleRoles.includes(u.role));
+  const cur=sel.value;
+  sel.innerHTML='<option value="">— None —</option>'+
+    eligible.map(u=>`<option value="${u.email}">${u.name} (${ROLES.find(r=>r.id===u.role)?.label||u.role})</option>`).join('');
+  if(cur)sel.value=cur;
+}
+
+function downloadUserTemplate(){
+  const rows=[['Name','Position','Email','Role','Reports To (email)'],
+    ['Jane Smith','Sales Representative','jane@geveko.com','sales_rep','manager@geveko.com'],
+    ['Bob Jones','Sales Lead','bob@geveko.com','sales_lead','director@geveko.com']];
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Users');
+  XLSX.writeFile(wb,'geveko-users-template.xlsx');
+}
+
+function bulkImportUsers(input){
+  const file=input.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'binary'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const raw=XLSX.utils.sheet_to_json(ws,{defval:''});
+      let added=0,skipped=0;
+      raw.forEach(row=>{
+        const name=String(row['Name']||row['name']||'').trim();
+        const email=String(row['Email']||row['email']||'').trim().toLowerCase();
+        const role=String(row['Role']||row['role']||'sales_rep').trim().toLowerCase().replace(/\s+/g,'_');
+        const position=String(row['Position']||row['position']||'').trim();
+        const reportsTo=String(row['Reports To (email)']||row['reportsTo']||'').trim().toLowerCase();
+        if(!name||!email){skipped++;return;}
+        const validRole=['sales_rep','sales_lead','sales_director','pricing_mgr'].includes(role)?role:'sales_rep';
+        if(appUsers.find(u=>u.email===email)){skipped++;return;}
+        appUsers.push({id:Date.now()+Math.random(),name,position,email,role:validRole,reportsTo});
+        added++;
+      });
+      saveState();renderUsersTable();
+      alert('✅ Imported '+added+' users.'+(skipped?' '+skipped+' skipped (duplicate or missing data).':''));
+    }catch(err){alert('❌ Could not read file: '+err.message);}
+    input.value='';
+  };
+  reader.readAsBinaryString(file);
+}
+
 function editUser(id){
   const u=appUsers.find(x=>x.id===id);if(!u)return;
-  g('uf-name').value=u.name;g('uf-position').value=u.position;g('uf-email').value=u.email;g('uf-role').value=u.role;g('uf-edit-id').value=u.id;
+  g('uf-name').value=u.name;g('uf-position').value=u.position;g('uf-email').value=u.email;
+  g('uf-role').value=u.role;g('uf-edit-id').value=u.id;
+  renderReportsToOptions();
+  const rto=g('uf-reports-to');if(rto&&u.reportsTo)rto.value=u.reportsTo;
   g('user-save-btn').textContent='UPDATE';g('user-cancel-btn').style.display='inline-block';
 }
 
 function cancelEditUser(){
   ['uf-name','uf-position','uf-email'].forEach(id=>g(id).value='');
-  g('uf-role').value='sales_rep';g('uf-edit-id').value='';
+  g('uf-role').value='sales_rep';
+  g('uf-edit-id').value='';
+  const rto=g('uf-reports-to');if(rto)rto.value='';
   g('user-save-btn').textContent='ADD';g('user-cancel-btn').style.display='none';
 }
 
@@ -1842,6 +1946,7 @@ function renderSalesTable(){
     <td style="font-family:var(--font-mono)">${r.accountNo||''}</td>
     <td style="font-weight:600">${r.accountName||''}</td>
     <td style="font-family:var(--font-mono);color:var(--orange)">${fmtEur(r.sales||0)}</td>
+    <td style="font-family:var(--font-mono);text-align:right">${r.qty!=null?r.qty.toLocaleString():''}</td>
     <td style="font-family:var(--font-mono);color:${marginColor((r.cm||0)/(r.sales||1))}">${r.cm!=null?fmtEur(r.cm):''}</td>
     <td>${r.currency||'EUR'}</td>
     <td>${r.year||''}</td>
@@ -1854,8 +1959,8 @@ function renderSalesTable(){
 }
 
 function exportSalesData(){
-  const rows=[['Account No.','Account Name','Sales','Contribution Margin','Currency','Year','Product Line','Item Group','Item Number','Item Description']];
-  salesRows.forEach(r=>rows.push([r.accountNo,r.accountName,r.sales,r.cm,r.currency,r.year,r.productLine,r.itemGroup,r.itemNumber,r.itemDescription]));
+  const rows=[['Account No.','Account Name','Sales','Qty','Contribution Margin','Currency','Year','Product Line','Item Group','Item Number','Item Description']];
+  salesRows.forEach(r=>rows.push([r.accountNo,r.accountName,r.sales,r.qty,r.cm,r.currency,r.year,r.productLine,r.itemGroup,r.itemNumber,r.itemDescription]));
   const ws=XLSX.utils.aoa_to_sheet(rows);
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Sales');XLSX.writeFile(wb,'geveko-sales.xlsx');
 }
@@ -2008,7 +2113,7 @@ function downloadProductTemplate(){
 }
 
 function downloadSalesTemplate(){
-  const rows=[['Account Number','Account Name','Item Number','Item Description','Sales','Contribution Margin','Currency','Year','Product Line','Item Group'],['ACC-001','Roadworks AB','TPS-001','Thermoplastic Standard White',25000,8750,'EUR','2024','Thermoplastic','Standard']];
+  const rows=[['Account Number','Account Name','Item Number','Item Description','Sales','Qty','Contribution Margin','Currency','Year','Product Line','Item Group'],['ACC-001','Roadworks AB','TPS-001','Thermoplastic Standard White',25000,1200,8750,'EUR','2024','Thermoplastic','Standard']];
   const ws=XLSX.utils.aoa_to_sheet(rows);
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Sales');XLSX.writeFile(wb,'geveko-sales-template.xlsx');
 }
@@ -2258,9 +2363,71 @@ function saveCurrentQuote(){
   renderQuotesTable();
 }
 
+function onDealNameInput(val){
+  var err=g('deal-name-error');
+  if(err)err.style.display=val.trim()?'none':'block';
+}
+
+function requireDealName(){
+  var val=(g('deal-name-input')?.value||'').trim();
+  if(!val){
+    var err=g('deal-name-error');
+    if(err)err.style.display='block';
+    g('deal-name-input').focus();
+    return false;
+  }
+  return true;
+}
+
+function createNewDeal(){
+  if(!confirm('Start a new deal? Unsaved changes will be lost.'))return;
+  g('deal-name-input').value='';
+  g('account-number').value='';
+  g('account-name').value='';
+  g('deal-notes').value='';
+  customerType='first';
+  dealType='standard';
+  selectedAddOns=[];
+  lineItems=[{id:Date.now(),productId:null,qty:1,manualPrice:null}];
+  var dash=g('acct-dashboard');if(dash)dash.classList.remove('visible');
+  var badge=g('account-found-badge');if(badge)badge.style.display='none';
+  var err=g('deal-name-error');if(err)err.style.display='none';
+  setTab('calculator');
+  renderCalculator();
+}
+
+function saveDeal(){
+  if(!requireDealName())return;
+  saveCurrentQuote();
+}
+
+function exportAndSave(){
+  if(!requireDealName())return;
+  saveCurrentQuote();
+  exportQuotePDF();
+}
+
+function requestApproval(){
+  if(!requireDealName())return;
+  saveCurrentQuote();
+  // Find the just-saved quote
+  var quote=quoteHistory[0];
+  if(quote)sendApprovalEmail(quote);
+}
+
 function sendApprovalEmail(quote){
-  var approver=appUsers.find(function(u){return u.role==='pricing_mgr'||u.role==='sales_director';});
-  if(!approver){alert('No approver found. Add a Pricing Manager or Sales Director in the Users tab.');return;}
+  // Find approver via reportsTo chain from the creator
+  var creator=appUsers.find(function(u){return u.email===quote.createdByEmail;});
+  var approver=null;
+  // Follow reportsTo chain
+  if(creator&&creator.reportsTo){
+    approver=appUsers.find(function(u){return u.email===creator.reportsTo;});
+  }
+  // Fallback: first pricing_mgr or sales_director
+  if(!approver){
+    approver=appUsers.find(function(u){return u.role==='pricing_mgr'||u.role==='sales_director';});
+  }
+  if(!approver){alert('No approver found. Please set up a manager in the Users tab using the Reports To field.');return;}
   var nl='%0A';
   var lines=[
     'Hi '+approver.name+',','',
