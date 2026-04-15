@@ -180,16 +180,16 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
   background:#1a1e28;color:#fff;
   border-radius:8px;padding:14px 16px;
   font-size:11px;line-height:1.7;
-  max-width:560px;min-width:480px;
+  max-width:640px;min-width:520px;
   box-shadow:0 8px 30px rgba(0,0,0,0.25);
   pointer-events:none;
   opacity:0;transition:opacity 0.15s;
-  white-space:nowrap;
 }
 .dash-tooltip.visible{opacity:1;}
 .dash-tooltip table{width:100%;border-collapse:collapse;}
-.dash-tooltip th{font-size:9px;color:#8e97ab;letter-spacing:1px;text-transform:uppercase;padding:2px 4px;text-align:left;border-bottom:1px solid #ffffff20;}
-.dash-tooltip td{padding:3px 4px;font-family:'DM Mono',monospace;font-size:10px;}
+.dash-tooltip th{font-size:9px;color:#8e97ab;letter-spacing:1px;text-transform:uppercase;padding:3px 8px;text-align:left;border-bottom:1px solid #ffffff20;white-space:nowrap;}
+.dash-tooltip td{padding:3px 8px;font-family:'DM Mono',monospace;font-size:10px;white-space:nowrap;}
+.dash-tooltip .desc-col{white-space:normal;max-width:200px;}
 .dash-tooltip tr:hover td{background:rgba(255,255,255,0.05);}
 .dash-group-card{cursor:default;}
 /* ── SALES PANEL ── */
@@ -786,6 +786,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
           <option value="sales_rep">Sales Rep</option>
           <option value="sales_lead">Sales Lead</option>
           <option value="sales_director">Sales Director</option>
+          <option value="senior_mgmt">Senior Management</option>
           <option value="pricing_mgr">Admin (Pricing Mgr)</option>
         </select>
       </div>
@@ -1028,6 +1029,17 @@ function showApp(roleId){
   var app=g('app');
   if(lp)lp.style.display='none';
   if(app)app.style.display='flex';
+  // Reset calculator to clean state on every login
+  lineItems=[{id:Date.now(),productId:null,qty:1,manualPrice:null}];
+  customerType='first';
+  dealType='standard';
+  selectedAddOns=[];
+  var dn=g('deal-name-input');if(dn)dn.value='';
+  var an=g('account-number');if(an)an.value='';
+  var acn=g('account-name');if(acn)acn.value='';
+  var nt=g('deal-notes');if(nt)nt.value='';
+  var dash=g('acct-dashboard');if(dash)dash.classList.remove('visible');
+  var badge=g('account-found-badge');if(badge)badge.style.display='none';
   applyRole(roleId);
   renderCalculator();
 }
@@ -1200,10 +1212,14 @@ const ROLES=[
    desc:"Full visibility. Can manage products, settings, access, and approval thresholds.",
    canSeeCost:true,canSeeMargin:true,isAdmin:true,
    perms:["Full cost & margin visibility","Manage product catalog","Edit settings & modifiers","Manage approval thresholds","Import/export all data","All approvals","User management"]},
-  {id:"sales_director",label:"Sales Director / Senior Mgmt",icon:"🏆",color:"#6040c8",bg:"#f0ecfc",
+  {id:"sales_director",label:"Sales Director",icon:"🏆",color:"#6040c8",bg:"#f0ecfc",
    desc:"Full visibility across the entire tool for oversight and strategic decisions.",
    canSeeCost:true,canSeeMargin:true,isAdmin:false,
    perms:["Full cost & margin visibility","All tool features","Override any pricing","Strategic dashboard","Executive approvals"]},
+  {id:"senior_mgmt",label:"Senior Management",icon:"🌐",color:"#374151",bg:"#f3f4f6",
+   desc:"Senior management access. View-only. Not part of approval flow.",
+   canSeeCost:true,canSeeMargin:true,isAdmin:false,
+   perms:["Full cost & margin visibility","View all quotes","View sales data","Strategic overview"]},
 ];
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1457,10 +1473,10 @@ function renderLineItems(){
       if(pRows.length){
         const rev=pRows.reduce((s,x)=>s+(x.sales||0),0);
         // Collect qty from sales rows if available, else try to estimate from CM
-        const totalUnits=pRows.reduce((s,x)=>s+(parseFloat(x.qty)||0),0);
-        const asp=totalUnits>0?rev/totalUnits:null;
+        const totalUnits=pRows.reduce((s,x)=>s+(Number(x.qty)||0),0);
+        const asp=(totalUnits>0)?rev/totalUnits:null;
         const yrs=[...new Set(pRows.map(x=>x.year).filter(Boolean))].sort().join(', ');
-        const aspStr=asp?` · ASP ${fmtEur(asp)}/unit`:'';
+        const aspStr=(asp&&asp>0)?` · ASP ${fmtEur(Math.round(asp))}/unit`:'';
         aspHint=`<div class="asp-hint">↑ Prev. sales: ${fmtEur(rev)}${aspStr}${yrs?' ('+yrs+')':''}</div>`;
       }
     }
@@ -2357,9 +2373,7 @@ function saveCurrentQuote(){
   };
   quoteHistory.unshift(quote);
   saveState();
-  // Auto-trigger approval email if needed
-  if(quote.status==='pending') sendApprovalEmail(quote);
-  alert('✅ Quote '+ref+' saved to history.');
+  alert('✅ Quote '+ref+' saved.');
   renderQuotesTable();
 }
 
@@ -2423,9 +2437,16 @@ function sendApprovalEmail(quote){
   if(creator&&creator.reportsTo){
     approver=appUsers.find(function(u){return u.email===creator.reportsTo;});
   }
-  // Fallback: first pricing_mgr or sales_director
+  // Fallback: sales_director first, then sales_lead (NOT admin/pricing_mgr unless they are the only option)
   if(!approver){
-    approver=appUsers.find(function(u){return u.role==='pricing_mgr'||u.role==='sales_director';});
+    approver=appUsers.find(function(u){return u.role==='sales_director';});
+  }
+  if(!approver){
+    approver=appUsers.find(function(u){return u.role==='sales_lead';});
+  }
+  // Last resort: pricing_mgr (but not the admin@geveko.com bootstrap account)
+  if(!approver){
+    approver=appUsers.find(function(u){return u.role==='pricing_mgr'&&u.email!=='admin@geveko.com';});
   }
   if(!approver){alert('No approver found. Please set up a manager in the Users tab using the Reports To field.');return;}
   var nl='%0A';
@@ -2465,6 +2486,13 @@ function markSent(id){
 function setOutcome(id,outcome){
   quoteHistory=quoteHistory.map(q=>q.id===id?{...q,customerOutcome:outcome,outcomeDate:new Date().toISOString(),status:outcome==='accepted'?'accepted':'declined'}:q);
   saveState();renderQuotesTable();
+}
+
+function deleteQuote(id){
+  if(!confirm('Delete this quote? This cannot be undone.'))return;
+  quoteHistory=quoteHistory.filter(function(q){return q.id!==id;});
+  saveState();
+  renderQuotesTable();
 }
 
 function loadQuoteToCalc(id){
@@ -2517,7 +2545,22 @@ function renderQuotesTable(){
   tbody.innerHTML=filtered.map(q=>{
     const sc=statusColors[q.status]||'var(--text3)';
     const sl=statusLabels[q.status]||q.status;
-    const canApprove=(activeRole==='pricing_mgr'||activeRole==='sales_director')&&q.status==='pending';
+    const canApprove=q.status==='pending'&&(
+      activeRole==='pricing_mgr'||
+      activeRole==='sales_director'||
+      (activeRole==='sales_lead'&&(
+        // Sales lead can approve their team's quotes
+        q.createdByEmail===(currentUser?.email)||
+        appUsers.find(function(u){return u.email===q.createdByEmail&&u.reportsTo===currentUser?.email;})
+      ))
+    );
+    // Delete: admin deletes all; sales lead deletes own + team
+    const canDelete=activeRole==='pricing_mgr'||(
+      activeRole==='sales_lead'&&(
+        q.createdByEmail===(currentUser?.email)||
+        appUsers.find(function(u){return u.email===q.createdByEmail&&u.reportsTo===currentUser?.email;})
+      )
+    );
     const canSetOutcome=q.status==='sent'||q.status==='approved';
     return `<tr>
       <td style="font-family:var(--font-mono);font-size:11px;font-weight:600;color:var(--orange)">${q.ref}</td>
@@ -2539,6 +2582,7 @@ function renderQuotesTable(){
             <button class="btn btn-xs" style="background:var(--red-lt);color:var(--red);border:1px solid #f0c0c0" onclick="setOutcome(${q.id},'declined')">✗ Lost</button>
           `:''}
           <button class="btn btn-secondary btn-xs" onclick="loadQuoteToCalc(${q.id})">Load</button>
+          ${canDelete?`<button class="btn btn-danger btn-xs" onclick="deleteQuote(${q.id})">Del</button>`:''}
           ${q.status==='pending'?`<button class="btn btn-secondary btn-xs" onclick="sendApprovalEmail(quoteHistory.find(x=>x.id===${q.id}))">📧 Notify</button>`:''}
         </div>
       </td>
@@ -2582,8 +2626,8 @@ function showPlTooltip(evt,plName,rows){
   html+=`</tr></thead><tbody>`;
   skuList.forEach(s=>{
     const cmPct=s.sales>0?s.cm/s.sales:0;
-    const asp=s.qty>0?s.sales/s.qty:null;
-    const descShort=s.desc.length>18?s.desc.substring(0,18)+'…':s.desc;
+    const asp=(Number(s.qty)>0)?s.sales/Number(s.qty):null;
+    const descShort=s.desc.length>28?s.desc.substring(0,28)+'…':s.desc;
     html+=`<tr>
       <td style="color:#e8560a">${s.sku}</td>
       <td>${descShort}</td>
@@ -2600,13 +2644,21 @@ function showPlTooltip(evt,plName,rows){
 }
 
 function positionTooltip(evt,tt){
-  const margin=12;
-  const tw=Math.min(360,window.innerWidth-margin*2);
-  tt.style.width=tw+'px';
-  let left=evt.clientX+margin;
-  let top=evt.clientY+margin;
-  if(left+tw>window.innerWidth-margin)left=evt.clientX-tw-margin;
-  if(top+tt.offsetHeight>window.innerHeight-margin)top=evt.clientY-tt.offsetHeight-margin;
+  const margin=10;
+  // Allow tooltip to be as wide as it needs (CSS sets min 480px)
+  // but cap at viewport width minus margins
+  const maxW=Math.min(640,window.innerWidth-margin*2);
+  tt.style.maxWidth=maxW+'px';
+  tt.style.width='auto';
+  // Position: prefer right of cursor, flip left if needed
+  let left=evt.clientX+16;
+  let top=evt.clientY+16;
+  const ttW=Math.min(maxW, tt.offsetWidth||520);
+  const ttH=tt.offsetHeight||200;
+  if(left+ttW>window.innerWidth-margin)left=evt.clientX-ttW-10;
+  if(left<margin)left=margin;
+  if(top+ttH>window.innerHeight-margin)top=evt.clientY-ttH-10;
+  if(top<margin)top=margin;
   tt.style.left=left+'px';
   tt.style.top=top+'px';
 }
