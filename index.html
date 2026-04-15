@@ -1471,13 +1471,22 @@ function renderLineItems(){
     if(acctSales&&prod){
       const pRows=acctSales.filter(x=>x.itemNumber===prod.sku);
       if(pRows.length){
-        const rev=pRows.reduce((s,x)=>s+(x.sales||0),0);
-        // Collect qty from sales rows if available, else try to estimate from CM
-        const totalUnits=pRows.reduce((s,x)=>s+(Number(x.qty)||0),0);
-        const asp=(totalUnits>0)?rev/totalUnits:null;
-        const yrs=[...new Set(pRows.map(x=>x.year).filter(Boolean))].sort().join(', ');
-        const aspStr=(asp&&asp>0)?` · ASP ${fmtEur(Math.round(asp))}/unit`:'';
-        aspHint=`<div class="asp-hint">↑ Prev. sales: ${fmtEur(rev)}${aspStr}${yrs?' ('+yrs+')':''}</div>`;
+        // Group by year, calc ASP = sales/qty per year
+        const byYear={};
+        pRows.forEach(r=>{
+          const yr=r.year||'Unknown';
+          if(!byYear[yr])byYear[yr]={sales:0,qty:0};
+          byYear[yr].sales+=(Number(r.sales)||0);
+          byYear[yr].qty+=(Number(r.qty)||0);
+        });
+        const yearLines=Object.keys(byYear).sort().map(yr=>{
+          const d=byYear[yr];
+          const asp=d.qty>0?d.sales/d.qty:null;
+          const aspStr=asp!=null?` · ASP €${asp.toFixed(2)}/unit`:'';
+          return yr+': '+fmtEur(d.sales)+aspStr;
+        });
+        const totalRev=pRows.reduce((s,x)=>s+(Number(x.sales)||0),0);
+        aspHint=`<div class="asp-hint">↑ Prev: ${yearLines.join(' | ')}</div>`;
       }
     }
     const ov=item.manualPrice!==null?item.manualPrice:'';
@@ -2333,16 +2342,36 @@ function exportQuotePDF(){
 // QUOTE HISTORY / AUDIT TRAIL
 // ═══════════════════════════════════════════════════════════════════
 
+function quoteFingerprint(t, dealName, acctNo, notes){
+  // A fingerprint of the deal content — if unchanged, don't create a new version
+  var items=lineItems.map(function(l){
+    var prod=products.find(function(p){return p.id===l.productId;});
+    return (prod?prod.sku:'?')+':'+l.qty+':'+(l.manualPrice!=null?l.manualPrice:'list');
+  }).join('|');
+  return [dealName,acctNo,notes,customerType,dealType,selectedAddOns.slice().sort().join(','),
+          Math.round(t.final),Math.round(t.finM*10000),items].join('§');
+}
+
 function saveCurrentQuote(){
   const t=calcTotals();
-  const dealName=g('deal-name-input')?.value||'Untitled';
+  const dealName=(g('deal-name-input')?.value||'').trim()||'Untitled';
   const acctName=g('account-name')?.value||'';
   const acctNo=g('account-number')?.value||'';
   const notes=g('deal-notes')?.value||'';
   if(!lineItems.some(l=>products.find(p=>p.id===l.productId))){
     alert('Add at least one product before saving a quote.');return;
   }
+  const fp=quoteFingerprint(t,dealName,acctNo,notes);
+  // Check if the most recent quote for this deal (same creator, name, account) is identical
+  const existing=quoteHistory.find(function(q){
+    return q.dealName===dealName&&q.acctNo===acctNo&&q.createdByEmail===(currentUser?currentUser.email:'')&&q._fp===fp;
+  });
+  if(existing){
+    // No changes — just return the existing quote silently (no alert, no new entry)
+    return existing;
+  }
   const ref='GEV-'+Date.now().toString().slice(-6);
+  const versionNum=(quoteHistory.filter(function(q){return q.acctNo===acctNo&&q.dealName===dealName&&q.createdByEmail===(currentUser?currentUser.email:'');}).length)+1;
   const quote={
     id:Date.now(),
     ref,
@@ -2356,25 +2385,27 @@ function saveCurrentQuote(){
     totalPrice: t.final,
     margin: t.finM,
     approvalRequired: t.appr?t.appr.label:'',
-    approvedBy: '',
-    approvedDate: '',
+    approvedBy:'',
+    approvedDate:'',
     status: t.appr&&t.appr.id!=='auto'?'pending':'approved',
-    customerOutcome: '',
-    outcomeDate: '',
+    customerOutcome:'',
+    outcomeDate:'',
     notes,
-    lineItems: lineItems.map(l=>{
-      const prod=products.find(p=>p.id===l.productId);
+    lineItems: lineItems.map(function(l){
+      const prod=products.find(function(p){return p.id===l.productId;});
       const r=calcLine(l);
-      return{sku:prod?.sku||'',name:prod?.name||'',qty:l.qty,selling:r.selling,margin:r.margin};
+      return{sku:prod?prod.sku:'',name:prod?prod.name:'',qty:l.qty,selling:r.selling,margin:r.margin};
     }),
     customerType,dealType,
-    selectedAddOns:[...selectedAddOns],
-    version: (quoteHistory.filter(q=>q.acctNo===acctNo&&q.dealName===dealName).length)+1,
+    selectedAddOns:selectedAddOns.slice(),
+    version:versionNum,
+    _fp:fp,
   };
   quoteHistory.unshift(quote);
   saveState();
-  alert('✅ Quote '+ref+' saved.');
+  alert('✅ Quote '+ref+(versionNum>1?' (v'+versionNum+')':'')+' saved.');
   renderQuotesTable();
+  return quote;
 }
 
 function onDealNameInput(val){
@@ -2419,13 +2450,14 @@ function exportAndSave(){
   if(!requireDealName())return;
   saveCurrentQuote();
   exportQuotePDF();
+  // No extra alert needed — saveCurrentQuote already confirmed
 }
 
 function requestApproval(){
   if(!requireDealName())return;
-  saveCurrentQuote();
-  // Find the just-saved quote
-  var quote=quoteHistory[0];
+  var quote=saveCurrentQuote();
+  // saveCurrentQuote returns existing if unchanged, or new quote
+  if(!quote)quote=quoteHistory[0];
   if(quote)sendApprovalEmail(quote);
 }
 
@@ -2471,11 +2503,33 @@ function sendApprovalEmail(quote){
 
 function approveQuote(id){
   if(!currentUser){return;}
-  quoteHistory=quoteHistory.map(q=>{
-    if(q.id!==id)return q;
-    return{...q,status:'approved',approvedBy:currentUser.name,approvedDate:new Date().toISOString()};
+  var q=quoteHistory.find(function(x){return x.id===id;});
+  if(!q)return;
+  quoteHistory=quoteHistory.map(function(x){
+    if(x.id!==id)return x;
+    return Object.assign({},x,{status:'approved',approvedBy:currentUser.name,approvedDate:new Date().toISOString()});
   });
   saveState();renderQuotesTable();
+  // Email creator
+  var creator=appUsers.find(function(u){return u.email===q.createdByEmail;});
+  if(creator&&creator.email){
+    var nl='%0A';
+    var lines=[
+      'Hi '+creator.name+',','',
+      'Great news — your quote has been approved!','',
+      'Reference: '+q.ref,
+      'Deal: '+q.dealName,
+      'Account: '+(q.acctName||q.acctNo||''),
+      'Total Price: '+fmtEur(q.totalPrice),
+      'Approved by: '+currentUser.name,
+      'Date: '+new Date().toLocaleDateString('en-GB'),
+      '','You may now proceed with sending the quote to the customer.',
+      '','This is an automated notification from the Geveko Pricing Tool.'
+    ];
+    var subject=encodeURIComponent('Quote Approved: '+q.dealName+' ('+q.ref+')');
+    var body=lines.map(function(l){return encodeURIComponent(l);}).join(nl);
+    window.open('mailto:'+creator.email+'?subject='+subject+'&body='+body);
+  }
 }
 
 function markSent(id){
@@ -2484,8 +2538,39 @@ function markSent(id){
 }
 
 function setOutcome(id,outcome){
-  quoteHistory=quoteHistory.map(q=>q.id===id?{...q,customerOutcome:outcome,outcomeDate:new Date().toISOString(),status:outcome==='accepted'?'accepted':'declined'}:q);
+  var q=quoteHistory.find(function(x){return x.id===id;});
+  if(!q)return;
+  var denialReason='';
+  if(outcome==='declined'){
+    denialReason=prompt('Optional: Enter reason for denial (will be included in notification to creator):','') || '';
+  }
+  quoteHistory=quoteHistory.map(function(x){
+    if(x.id!==id)return x;
+    return Object.assign({},x,{customerOutcome:outcome,outcomeDate:new Date().toISOString(),status:outcome==='accepted'?'accepted':'declined',denialReason:denialReason});
+  });
   saveState();renderQuotesTable();
+  // Notify creator
+  var creator=appUsers.find(function(u){return u.email===q.createdByEmail;});
+  if(creator&&creator.email&&outcome==='declined'){
+    var nl='%0A';
+    var lines=[
+      'Hi '+creator.name+',','',
+      'Your quote has not been approved at this time.','',
+      'Reference: '+q.ref,
+      'Deal: '+q.dealName,
+      'Account: '+(q.acctName||q.acctNo||''),
+      'Total Price: '+fmtEur(q.totalPrice),
+      'Reviewed by: '+(currentUser?currentUser.name:''),
+      'Date: '+new Date().toLocaleDateString('en-GB'),
+      ''
+    ];
+    if(denialReason)lines.push('Reason: '+denialReason,'');
+    lines.push('Please review the pricing and resubmit if appropriate.');
+    lines.push('','This is an automated notification from the Geveko Pricing Tool.');
+    var subject=encodeURIComponent('Quote Not Approved: '+q.dealName+' ('+q.ref+')');
+    var body=lines.map(function(l){return encodeURIComponent(l);}).join(nl);
+    window.open('mailto:'+creator.email+'?subject='+subject+'&body='+body);
+  }
 }
 
 function deleteQuote(id){
@@ -2618,23 +2703,32 @@ function showPlTooltip(evt,plName,rows){
     bySku[k].qty+=(parseFloat(r.qty)||0);
     if(r.year)bySku[k].years.add(r.year);
   });
+  // Group by SKU+year for per-year ASP
+  const bySkuYear={};
+  plRows.forEach(r=>{
+    const k=(r.itemNumber||'?')+'||'+(r.year||'?');
+    if(!bySkuYear[k])bySkuYear[k]={sku:r.itemNumber||'?',desc:r.itemDescription||r.itemNumber||'',year:r.year||'?',sales:0,cm:0,qty:0};
+    bySkuYear[k].sales+=(Number(r.sales)||0);
+    bySkuYear[k].cm+=(Number(r.cm)||0);
+    bySkuYear[k].qty+=(Number(r.qty)||0);
+  });
+  const skuYearList=Object.values(bySkuYear).sort((a,b)=>b.year-a.year||b.sales-a.sales);
+  // Also keep original bySku for summary
   const skuList=Object.values(bySku).sort((a,b)=>b.sales-a.sales);
   let html=`<div style="font-size:10px;font-weight:800;color:#e8560a;letter-spacing:1px;margin-bottom:8px;text-transform:uppercase">${plName}</div>`;
-  html+=`<table><thead><tr><th>Item No.</th><th>Description</th><th>Sales</th><th>CM%</th><th>Year(s)</th>`;
-  const hasQty=skuList.some(s=>s.qty>0);
-  if(hasQty)html+=`<th>ASP</th>`;
-  html+=`</tr></thead><tbody>`;
-  skuList.forEach(s=>{
+  html+=`<table><thead><tr><th>Item No.</th><th>Description</th><th>Year</th><th>Sales</th><th>Qty</th><th>ASP (€)</th><th>CM%</th></tr></thead><tbody>`;
+  skuYearList.forEach(s=>{
     const cmPct=s.sales>0?s.cm/s.sales:0;
-    const asp=(Number(s.qty)>0)?s.sales/Number(s.qty):null;
-    const descShort=s.desc.length>28?s.desc.substring(0,28)+'…':s.desc;
+    const asp=s.qty>0?s.sales/s.qty:null;
+    const descShort=s.desc.length>30?s.desc.substring(0,30)+'…':s.desc;
     html+=`<tr>
       <td style="color:#e8560a">${s.sku}</td>
       <td>${descShort}</td>
+      <td style="color:#8e97ab">${s.year}</td>
       <td>${fmtEur(s.sales)}</td>
+      <td>${s.qty>0?s.qty.toLocaleString():'—'}</td>
+      <td style="color:#4ade80;font-weight:700">${asp!=null?'€'+asp.toFixed(2):'—'}</td>
       <td style="color:${s.cm>0?'#4ade80':'#f87171'}">${fmtPct(cmPct)}</td>
-      <td style="color:#8e97ab">${[...s.years].sort().join(', ')||'—'}</td>
-      ${hasQty?`<td>${asp?fmtEur(asp):'—'}</td>`:''}
     </tr>`;
   });
   html+=`</tbody></table>`;
