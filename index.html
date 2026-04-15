@@ -930,11 +930,35 @@ function doLogin(){
   var errEl=g('login-error');
 
   if(!email){errEl.textContent='Please enter your email address.';return;}
+
+  // Lockout check — 3 failed attempts locks for 30 min
+  var lockKey='geveko_lock_'+email;
+  var lockRaw=localStorage.getItem(lockKey);
+  var lockData=lockRaw?JSON.parse(lockRaw):{};
+  if(lockData.locked){
+    var elapsed=(Date.now()-(lockData.lockedAt||0))/60000;
+    if(elapsed>30){localStorage.removeItem(lockKey);lockData={};}
+    else{
+      errEl.textContent='Account locked. Auto-unlocks in '+Math.ceil(30-elapsed)+' min, or contact your Pricing Manager.';
+      g('login-submit').disabled=true;
+      return;
+    }
+  }
+
   if(password!==SYSTEM_PASSWORD){
-    errEl.textContent='Incorrect password. Please try again.';
+    var attempts=(lockData.attempts||0)+1;
+    if(attempts>=3){
+      localStorage.setItem(lockKey,JSON.stringify({locked:true,attempts:attempts,lockedAt:Date.now()}));
+      errEl.textContent='Account locked after 3 failed attempts. Contact your Pricing Manager.';
+      g('login-submit').disabled=true;
+    } else {
+      localStorage.setItem(lockKey,JSON.stringify({attempts:attempts}));
+      errEl.textContent='Incorrect password. '+(3-attempts)+' attempt'+(3-attempts!==1?'s':'')+' remaining.';
+    }
     g('login-password').value='';
     return;
   }
+  localStorage.removeItem(lockKey);
 
   // Find user — admin@geveko.com always works
   var user=appUsers.find(function(u){return(u.email||'').toLowerCase()===email;});
@@ -949,6 +973,15 @@ function doLogin(){
   currentUser=user;
   try{sessionStorage.setItem(SESSION_KEY,JSON.stringify({email:user.email,role:user.role}));}catch(e){}
   showApp(user.role);
+}
+
+function emergencyUnlock(){
+  var keys=Object.keys(localStorage).filter(function(k){return k.indexOf('geveko_lock_')===0;});
+  keys.forEach(function(k){localStorage.removeItem(k);});
+  var errEl=g('login-error');
+  if(errEl){errEl.style.color='#1a9e6e';errEl.textContent='Login attempts cleared. Try again.';}
+  var btn=g('login-submit');if(btn)btn.disabled=false;
+  setTimeout(function(){var e=g('login-error');if(e){e.textContent='';e.style.color='';}},4000);
 }
 
 function showApp(roleId){
