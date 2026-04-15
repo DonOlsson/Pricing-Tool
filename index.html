@@ -846,7 +846,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
           <thead><tr>
             <th>Ref</th><th>Deal Name</th><th>Account</th><th>Created By</th>
             <th>Date</th><th>Total Price</th><th>Margin</th>
-            <th>Approval</th><th>Approved By</th><th>Customer Outcome</th><th>Actions</th>
+            <th>Approval</th><th>Approval Chain</th><th>Customer Outcome</th><th>Actions</th>
           </tr></thead>
           <tbody id="quotes-table-body"></tbody>
         </table>
@@ -2425,6 +2425,25 @@ function requireDealName(){
   return true;
 }
 
+function requireNotesForApproval(){
+  // Notes required when deal needs manager or director approval
+  var t=calcTotals();
+  var apprId=t.appr?t.appr.id:'auto';
+  if(apprId==='auto')return true; // No escalation needed, notes optional
+  var notes=(g('deal-notes')?.value||'').trim();
+  if(!notes){
+    alert('Notes / Justification is required for deals that need '+t.appr.label+'.
+
+Please fill in the Notes field before requesting approval.');
+    // Scroll to notes
+    var nt=g('deal-notes');
+    if(nt){nt.focus();nt.style.border='1.5px solid var(--red)';}
+    return false;
+  }
+  var nt=g('deal-notes');if(nt)nt.style.border='';
+  return true;
+}
+
 function createNewDeal(){
   if(!confirm('Start a new deal? Unsaved changes will be lost.'))return;
   g('deal-name-input').value='';
@@ -2456,33 +2475,48 @@ function exportAndSave(){
 
 function requestApproval(){
   if(!requireDealName())return;
+  if(!requireNotesForApproval())return;
   var quote=saveCurrentQuote();
-  // saveCurrentQuote returns existing if unchanged, or new quote
   if(!quote)quote=quoteHistory[0];
   if(quote)sendApprovalEmail(quote);
 }
 
-function sendApprovalEmail(quote){
-  // Find approver via reportsTo chain from the creator
-  var creator=appUsers.find(function(u){return u.email===quote.createdByEmail;});
-  var approver=null;
-  // Follow reportsTo chain
-  if(creator&&creator.reportsTo){
-    approver=appUsers.find(function(u){return u.email===creator.reportsTo;});
-  }
-  // Fallback: sales_director first, then sales_lead (NOT admin/pricing_mgr unless they are the only option)
-  if(!approver){
-    approver=appUsers.find(function(u){return u.role==='sales_director';});
-  }
-  if(!approver){
-    approver=appUsers.find(function(u){return u.role==='sales_lead';});
-  }
-  // Last resort: pricing_mgr (but not the admin@geveko.com bootstrap account)
-  if(!approver){
-    approver=appUsers.find(function(u){return u.role==='pricing_mgr'&&u.email!=='admin@geveko.com';});
-  }
-  if(!approver){alert('No approver found. Please set up a manager in the Users tab using the Reports To field.');return;}
+function mailTo(toEmail, subject, lines){
   var nl='%0A';
+  var s=encodeURIComponent(subject);
+  var b=lines.map(function(l){return encodeURIComponent(l);}).join(nl);
+  window.open('mailto:'+toEmail+'?subject='+s+'&body='+b);
+}
+
+// Find the direct manager of a user by email
+function getManager(userEmail){
+  var u=appUsers.find(function(x){return x.email===userEmail;});
+  if(!u||!u.reportsTo)return null;
+  return appUsers.find(function(x){return x.email===u.reportsTo;})||null;
+}
+
+// Find next escalation target above a given role level
+function getEscalationTarget(fromUserEmail, fromRole){
+  // Walk up the reportsTo chain until we find someone with higher authority
+  var mgr=getManager(fromUserEmail);
+  if(mgr&&(mgr.role==='sales_director'||mgr.role==='pricing_mgr'||mgr.role==='sales_lead'))return mgr;
+  // Fallback: find first user with appropriate higher role
+  if(fromRole==='sales_lead'){
+    return appUsers.find(function(u){return u.role==='sales_director';})||
+           appUsers.find(function(u){return u.role==='pricing_mgr'&&u.email!=='admin@geveko.com';})||null;
+  }
+  return appUsers.find(function(u){return u.role==='pricing_mgr'&&u.email!=='admin@geveko.com';})||null;
+}
+
+function sendApprovalEmail(quote){
+  // Step 1: send to the creator's direct manager (first step in chain)
+  var creator=appUsers.find(function(u){return u.email===quote.createdByEmail;});
+  var approver=creator?getManager(quote.createdByEmail):null;
+  // Fallback: sales_lead → sales_director → pricing_mgr
+  if(!approver) approver=appUsers.find(function(u){return u.role==='sales_lead';});
+  if(!approver) approver=appUsers.find(function(u){return u.role==='sales_director';});
+  if(!approver) approver=appUsers.find(function(u){return u.role==='pricing_mgr'&&u.email!=='admin@geveko.com';});
+  if(!approver){alert('No approver found. Set up a manager in the Users tab using the Reports To field.');return;}
   var lines=[
     'Hi '+approver.name+',','',
     'A quote requires your approval:','',
@@ -2491,54 +2525,139 @@ function sendApprovalEmail(quote){
     'Account: '+(quote.acctName||quote.acctNo||''),
     'Total Price: '+fmtEur(quote.totalPrice),
     'Gross Margin: '+fmtPct(quote.margin),
-    'Approval Level: '+(quote.approvalRequired||''),
+    'Approval Required: '+(quote.approvalRequired||''),
     'Submitted by: '+(quote.createdBy||''),
     'Date: '+new Date(quote.date).toLocaleDateString('en-GB'),
-    '','Please review and approve in the Geveko Pricing Tool.',
+    '','Please log in to the Geveko Pricing Tool to approve or deny.',
     '','This is an automated notification.'
   ];
-  var subject=encodeURIComponent('Approval Required: '+quote.dealName+' ('+quote.ref+')');
-  var body=lines.map(function(l){return encodeURIComponent(l);}).join(nl);
-  window.open('mailto:'+approver.email+'?subject='+subject+'&body='+body);
-}
-
-function denyQuote(id){
-  var q=quoteHistory.find(function(x){return x.id===id;});
-  if(!q)return;
-  var reason=prompt('Enter reason for denial (will be sent to '+q.createdBy+'):','') || '';
+  mailTo(approver.email,'Approval Required: '+quote.dealName+' ('+quote.ref+')',lines);
+  // Update status to pending_mgr (first step)
   quoteHistory=quoteHistory.map(function(x){
-    if(x.id!==id)return x;
-    return Object.assign({},x,{status:'denied',deniedBy:currentUser?currentUser.name:'',deniedDate:new Date().toISOString(),denialReason:reason});
+    if(x.id!==quote.id)return x;
+    return Object.assign({},x,{status:'pending_mgr',approvalSteps:[]});
   });
   saveState();renderQuotesTable();
-  // Email creator
-  var creator=appUsers.find(function(u){return u.email===q.createdByEmail;});
-  if(creator&&creator.email){
-    var nl='%0A';
+}
+
+function approveQuote(id){
+  if(!currentUser)return;
+  var q=quoteHistory.find(function(x){return x.id===id;});
+  if(!q)return;
+  var apprLevelId='auto';
+  var apprLevelMatch=approvalLevels.find(function(a){return a.label===q.approvalRequired;});
+  if(apprLevelMatch)apprLevelId=apprLevelMatch.id;
+  var steps=(q.approvalSteps||[]).concat([{by:currentUser.name,email:currentUser.email,role:activeRole,date:new Date().toISOString()}]);
+  // Does this approval fully satisfy the requirement, or does it need escalation?
+  var needsEscalation=false;
+  if((apprLevelId==='dir'||apprLevelId==='exec')&&activeRole==='sales_lead'){
+    needsEscalation=true; // sales lead approved mgr layer, still needs director
+  }
+  if(apprLevelId==='exec'&&activeRole==='sales_director'){
+    needsEscalation=true; // director approved dir layer, still needs exec/pricing_mgr
+  }
+  if(needsEscalation){
+    // Partial approval — escalate to next level
+    var nextStatus=apprLevelId==='exec'?'pending_dir':'pending_dir';
+    if(apprLevelId==='dir'&&activeRole==='sales_lead') nextStatus='pending_dir';
+    if(apprLevelId==='exec'&&activeRole==='sales_director') nextStatus='pending_exec';
+    quoteHistory=quoteHistory.map(function(x){
+      if(x.id!==id)return x;
+      return Object.assign({},x,{status:nextStatus,approvalSteps:steps,approvedBy:currentUser.name+' (partial)'});
+    });
+    saveState();renderQuotesTable();
+    // Email the next approver
+    var nextApprover=getEscalationTarget(currentUser.email,activeRole);
+    if(!nextApprover){alert('Could not find next approver. Please escalate manually.');return;}
+    var stepNames=steps.map(function(s){return s.by+' ('+ROLES.find(function(r){return r.id===s.role;})?ROLES.find(function(r){return r.id===s.role;}).label:s.role+')\n';});
     var lines=[
-      'Hi '+creator.name+',','',
-      'Your quote has been reviewed and was not approved.','',
+      'Hi '+nextApprover.name+',','',
+      'A quote has been approved at manager level and now requires your approval:','',
       'Reference: '+q.ref,
       'Deal: '+q.dealName,
       'Account: '+(q.acctName||q.acctNo||''),
       'Total Price: '+fmtEur(q.totalPrice),
       'Gross Margin: '+fmtPct(q.margin),
-      'Reviewed by: '+(currentUser?currentUser.name:''),
+      'Approval Required: '+(q.approvalRequired||''),
+      'Created by: '+(q.createdBy||''),
+      'Approved so far by: '+currentUser.name,
+      'Date: '+new Date().toLocaleDateString('en-GB'),
+      '','Please log in to the Geveko Pricing Tool to complete the approval.',
+      '','This is an automated notification.'
+    ];
+    mailTo(nextApprover.email,'Escalation — Further Approval Required: '+q.dealName+' ('+q.ref+')',lines);
+  } else {
+    // Final approval — deal is fully approved
+    quoteHistory=quoteHistory.map(function(x){
+      if(x.id!==id)return x;
+      return Object.assign({},x,{status:'approved',approvedBy:currentUser.name,approvedDate:new Date().toISOString(),approvalSteps:steps});
+    });
+    saveState();renderQuotesTable();
+    // Email creator + all previous approvers
+    var creator=appUsers.find(function(u){return u.email===q.createdByEmail;});
+    var recipients=[creator].concat(steps.slice(0,-1).map(function(s){return appUsers.find(function(u){return u.email===s.email;});})).filter(Boolean);
+    var uniqueRecipients=[];
+    var seenEmails={};
+    recipients.forEach(function(r){if(r&&!seenEmails[r.email]){uniqueRecipients.push(r);seenEmails[r.email]=true;}});
+    var toEmails=uniqueRecipients.map(function(r){return r.email;}).join(',');
+    if(toEmails){
+      var stepSummary=steps.map(function(s){return s.by;}).join(' → ');
+      var lines=[
+        'Hi,',' ',
+        'Great news — the following quote has been fully approved and is ready to be sent to the customer!','',
+        'Reference: '+q.ref,
+        'Deal: '+q.dealName,
+        'Account: '+(q.acctName||q.acctNo||''),
+        'Total Price: '+fmtEur(q.totalPrice),
+        'Gross Margin: '+fmtPct(q.margin),
+        'Final approval by: '+currentUser.name,
+        'Approval chain: '+stepSummary+(stepSummary?(' → '+currentUser.name):''),
+        'Date: '+new Date().toLocaleDateString('en-GB'),
+        '','The deal creator may now proceed with sending the quote to the customer.',
+        '','This is an automated notification from the Geveko Pricing Tool.'
+      ];
+      mailTo(toEmails,'Quote Approved: '+q.dealName+' ('+q.ref+')',lines);
+    }
+  }
+}
+
+function denyQuote(id){
+  var q=quoteHistory.find(function(x){return x.id===id;});
+  if(!q)return;
+  var reason=prompt('Enter reason for denial (will be sent to creator and previous approvers):','')||'';
+  var steps=(q.approvalSteps||[]).concat([{by:currentUser?currentUser.name:'',email:currentUser?currentUser.email:'',role:activeRole,date:new Date().toISOString()}]);
+  quoteHistory=quoteHistory.map(function(x){
+    if(x.id!==id)return x;
+    return Object.assign({},x,{status:'denied',deniedBy:currentUser?currentUser.name:'',deniedDate:new Date().toISOString(),denialReason:reason,approvalSteps:steps});
+  });
+  saveState();renderQuotesTable();
+  // Email creator + all who were part of the chain
+  var creator=appUsers.find(function(u){return u.email===q.createdByEmail;});
+  var prevApprovers=steps.slice(0,-1).map(function(s){return appUsers.find(function(u){return u.email===s.email;});}).filter(Boolean);
+  var recipients=[creator].concat(prevApprovers).filter(Boolean);
+  var seenEmails={};var uniqueRecipients=[];
+  recipients.forEach(function(r){if(r&&!seenEmails[r.email]){uniqueRecipients.push(r);seenEmails[r.email]=true;}});
+  var toEmails=uniqueRecipients.map(function(r){return r.email;}).join(',');
+  if(toEmails){
+    var lines=[
+      'Hi,',' ',
+      'The following quote has not been approved.','',
+      'Reference: '+q.ref,
+      'Deal: '+q.dealName,
+      'Account: '+(q.acctName||q.acctNo||''),
+      'Total Price: '+fmtEur(q.totalPrice),
+      'Gross Margin: '+fmtPct(q.margin),
+      'Denied by: '+(currentUser?currentUser.name:''),
       'Date: '+new Date().toLocaleDateString('en-GB'),
       ''
     ];
-    if(reason){
-      lines.push('Reason for denial:');
-      lines.push(reason);
-      lines.push('');
-    }
-    lines.push('Please revise the pricing and resubmit for approval.');
+    if(reason){lines.push('Reason for denial:');lines.push(reason);lines.push('');}
+    lines.push('The deal creator should revise the pricing and resubmit.');
     lines.push('','This is an automated notification from the Geveko Pricing Tool.');
-    var subject=encodeURIComponent('Quote Denied: '+q.dealName+' ('+q.ref+')');
-    var body=lines.map(function(l){return encodeURIComponent(l);}).join(nl);
-    window.open('mailto:'+creator.email+'?subject='+subject+'&body='+body);
+    mailTo(toEmails,'Quote Denied: '+q.dealName+' ('+q.ref+')',lines);
   }
 }
+
 
 function approveQuote(id){
   if(!currentUser){return;}
@@ -2664,8 +2783,8 @@ function renderQuotesTable(){
     tbody.innerHTML=`<tr><td colspan="11" style="text-align:center;color:var(--text3);padding:28px">No quotes saved yet. Use "Save Current Quote" from the Calculator tab.</td></tr>`;
     return;
   }
-  const statusColors={draft:'var(--text3)',pending:'var(--yellow)',approved:'var(--green)',sent:'var(--blue)',accepted:'#1a9e6e',declined:'var(--red)',denied:'var(--red)'};
-  const statusLabels={draft:'Draft',pending:'⏳ Pending',approved:'✓ Approved',sent:'📤 Sent',accepted:'✅ Accepted',declined:'❌ Declined',denied:'🚫 Denied'};
+  const statusColors={draft:'var(--text3)',pending:'var(--yellow)',pending_mgr:'var(--yellow)',pending_dir:'var(--orange)',pending_exec:'var(--red)',approved:'var(--green)',sent:'var(--blue)',accepted:'#1a9e6e',declined:'var(--red)',denied:'var(--red)'};
+  const statusLabels={draft:'Draft',pending:'⏳ Pending',pending_mgr:'⏳ Mgr Review',pending_dir:'⏳ Dir Review',pending_exec:'⏳ Exec Review',approved:'✓ Approved',sent:'📤 Sent',accepted:'✅ Accepted',declined:'❌ Declined',denied:'🚫 Denied'};
   tbody.innerHTML=filtered.map(q=>{
     const sc=statusColors[q.status]||'var(--text3)';
     const sl=statusLabels[q.status]||q.status;
@@ -2684,14 +2803,25 @@ function renderQuotesTable(){
     // - Sales Director: can approve 'auto', 'mgr', 'dir' level. Cannot approve exec.
     // - Pricing Manager: can approve anything, including own team's deals.
     // - Nobody can approve their own deal if it requires director level or above.
-    var canApprove=q.status==='pending'&&(
-      (activeRole==='pricing_mgr'&&!isOwnDeal)||(
-        activeRole==='sales_director'&&!isOwnDeal&&apprLevelId!=='exec'
+    // Multi-step approval: pending_mgr = needs sales_lead; pending_dir = needs director; pending_exec = needs pricing_mgr
+    var isPending=q.status==='pending'||q.status==='pending_mgr'||q.status==='pending_dir'||q.status==='pending_exec';
+    var alreadyApprovedByMe=!!(q.approvalSteps||[]).find(function(s){return s.email===(currentUser?currentUser.email:'');});
+    var canApprove=isPending&&!isOwnDeal&&!alreadyApprovedByMe&&(
+      (activeRole==='pricing_mgr')||(
+        activeRole==='sales_director'&&(q.status==='pending'||q.status==='pending_mgr'||q.status==='pending_dir')
       )||(
-        activeRole==='sales_lead'&&(apprLevelId==='auto'||apprLevelId==='mgr')&&(isOwnDeal||isTeamDeal)
+        activeRole==='sales_lead'&&(q.status==='pending'||q.status==='pending_mgr')&&(isOwnDeal===false)&&(isTeamDeal||q.createdByEmail===(currentUser?currentUser.email:''))
       )
     );
-    var canDeny=canApprove;  // Same permissions to deny as to approve
+    // Sales lead can approve pending_mgr for team deals (not own)
+    // But also: sales lead IS the first step for escalating deals - they approve FIRST even for dir-level
+    if(isPending&&!isOwnDeal&&!alreadyApprovedByMe&&activeRole==='sales_lead'&&(isTeamDeal)){
+      canApprove=true;
+    }
+    var canDeny=isPending&&!isOwnDeal&&!alreadyApprovedByMe&&(
+      activeRole==='pricing_mgr'||activeRole==='sales_director'||
+      (activeRole==='sales_lead'&&(isTeamDeal))
+    );
     // Delete: admin deletes all; sales lead deletes own + team
     const canDelete=activeRole==='pricing_mgr'||(
       activeRole==='sales_lead'&&(
@@ -2709,7 +2839,7 @@ function renderQuotesTable(){
       <td style="font-family:var(--font-mono);color:var(--orange)">${fmtEur(q.totalPrice)}</td>
       <td class="margin-col" style="font-family:var(--font-mono);color:${marginColor(q.margin)}">${fmtPct(q.margin)}</td>
       <td style="font-size:11px;color:var(--text2)">${q.approvalRequired||'Auto'}</td>
-      <td style="font-size:11px">${q.approvedBy||'—'}</td>
+      <td style="font-size:11px">${(q.approvalSteps&&q.approvalSteps.length)?q.approvalSteps.map(function(s){return s.by;}).join(' → '):(q.approvedBy||'—')}</td>
       <td><span style="font-size:11px;font-weight:700;color:${sc}">${sl}</span></td>
       <td>
         <div class="flex g6" style="flex-wrap:wrap">
@@ -2722,7 +2852,7 @@ function renderQuotesTable(){
           `:''}
           <button class="btn btn-secondary btn-xs" onclick="loadQuoteToCalc(${q.id})">Load</button>
           ${canDelete?`<button class="btn btn-danger btn-xs" onclick="deleteQuote(${q.id})">Del</button>`:''}
-          ${q.status==='pending'?`<button class="btn btn-secondary btn-xs" onclick="sendApprovalEmail(quoteHistory.find(x=>x.id===${q.id}))">📧 Notify</button>`:''}
+          ${(q.status==='pending')?`<button class="btn btn-secondary btn-xs" onclick="sendApprovalEmail(quoteHistory.find(function(x){return x.id===${q.id};}))">📧 Notify</button>`:''}
         </div>
       </td>
     </tr>`;
