@@ -2259,39 +2259,25 @@ function saveCurrentQuote(){
 }
 
 function sendApprovalEmail(quote){
-  // Find approver — first user with pricing_mgr or sales_director role
-  const approver=appUsers.find(u=>u.role==='pricing_mgr'||u.role==='sales_director');
-  if(!approver){return;}
-  const subject=encodeURIComponent('Approval Required: '+quote.dealName+' ('+quote.ref+')');
-  const body=encodeURIComponent(
-    'Hi '+approver.name+',
-
-'+
-    'A quote requires your approval:
-
-'+
-    'Reference: '+quote.ref+'
-'+
-    'Deal: '+quote.dealName+'
-'+
-    'Account: '+(quote.acctName||quote.acctNo)+'
-'+
-    'Total Price: '+fmtEur(quote.totalPrice)+'
-'+
-    'Gross Margin: '+fmtPct(quote.margin)+'
-'+
-    'Approval Level: '+quote.approvalRequired+'
-'+
-    'Submitted by: '+quote.createdBy+'
-'+
-    'Date: '+new Date(quote.date).toLocaleDateString('en-GB')+'
-
-'+
-    'Please review and approve in the Geveko Pricing Tool.
-
-'+
-    'This is an automated notification from the Geveko Pricing Tool.'
-  );
+  var approver=appUsers.find(function(u){return u.role==='pricing_mgr'||u.role==='sales_director';});
+  if(!approver){alert('No approver found. Add a Pricing Manager or Sales Director in the Users tab.');return;}
+  var nl='%0A';
+  var lines=[
+    'Hi '+approver.name+',','',
+    'A quote requires your approval:','',
+    'Reference: '+quote.ref,
+    'Deal: '+quote.dealName,
+    'Account: '+(quote.acctName||quote.acctNo||''),
+    'Total Price: '+fmtEur(quote.totalPrice),
+    'Gross Margin: '+fmtPct(quote.margin),
+    'Approval Level: '+(quote.approvalRequired||''),
+    'Submitted by: '+(quote.createdBy||''),
+    'Date: '+new Date(quote.date).toLocaleDateString('en-GB'),
+    '','Please review and approve in the Geveko Pricing Tool.',
+    '','This is an automated notification.'
+  ];
+  var subject=encodeURIComponent('Approval Required: '+quote.dealName+' ('+quote.ref+')');
+  var body=lines.map(function(l){return encodeURIComponent(l);}).join(nl);
   window.open('mailto:'+approver.email+'?subject='+subject+'&body='+body);
 }
 
