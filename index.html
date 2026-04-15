@@ -2432,9 +2432,7 @@ function requireNotesForApproval(){
   if(apprId==='auto')return true; // No escalation needed, notes optional
   var notes=(g('deal-notes')?.value||'').trim();
   if(!notes){
-    alert('Notes / Justification is required for deals that need '+t.appr.label+'.
-
-Please fill in the Notes field before requesting approval.');
+    alert('Notes / Justification is required for deals that need '+t.appr.label+'. Please fill in the Notes field before requesting approval.');
     // Scroll to notes
     var nt=g('deal-notes');
     if(nt){nt.focus();nt.style.border='1.5px solid var(--red)';}
