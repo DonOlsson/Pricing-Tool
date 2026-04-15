@@ -992,10 +992,8 @@ function doLogin(){
 }
 
 function showApp(roleId){
-  const lp = g('login-page');
-  if(lp) lp.style.display='none';
-  const app = g('app');
-  if(app) app.style.display='flex';
+  const lp=g('login-page'); if(lp)lp.style.display='none';
+  const app=g('app'); if(app)app.style.display='flex';
   applyRole(roleId);
   renderCalculator();
 }
@@ -1033,34 +1031,28 @@ function doLogout(){
   const er=g('login-error'); if(er) er.textContent='';
 }
 
-(function(){
+// Auth init — called after loadState() at bottom of script
+function initAuth(){
+  // Hide app by default — show only after login
+  const app=g('app'); if(app)app.style.display='none';
+  const lp=g('login-page'); if(lp)lp.style.display='flex';
   // Restore session if still valid
   try{
-    const raw = sessionStorage.getItem(SESSION_KEY);
+    const raw=sessionStorage.getItem(SESSION_KEY);
     if(raw){
-      const sess = JSON.parse(raw);
-      // Verify user still exists in appUsers (loaded after this IIFE in loadState)
-      document.addEventListener('DOMContentLoaded', function(){
-        const user = appUsers.find(u=>(u.email||'').toLowerCase()===(sess.email||'').toLowerCase());
-        if(user){
-          currentUser = user;
-          showApp(sess.role||user.role);
-        } else {
-          // User was removed — force re-login
-          sessionStorage.removeItem(SESSION_KEY);
-          const app=g('app'); if(app)app.style.display='none';
-          setTimeout(()=>{const e=g('login-email');if(e)e.focus();},100);
-        }
-      });
-      return;
+      const sess=JSON.parse(raw);
+      const user=appUsers.find(u=>(u.email||'').toLowerCase()===(sess.email||'').toLowerCase());
+      if(user){
+        currentUser=user;
+        showApp(sess.role||user.role);
+        return;
+      }
+      sessionStorage.removeItem(SESSION_KEY);
     }
   } catch(e){}
-  // No session — hide app, show login
-  document.addEventListener('DOMContentLoaded', function(){
-    const app=g('app'); if(app)app.style.display='none';
-    setTimeout(()=>{const e=g('login-email');if(e)e.focus();},100);
-  });
-})();
+  // No valid session — show login
+  setTimeout(()=>{const e=g('login-email');if(e)e.focus();},50);
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // PERSISTENCE
@@ -2526,8 +2518,7 @@ function importSettings(input){
 // INIT
 // ═══════════════════════════════════════════════════════════════════
 loadState();
-applyRole(activeRole);
-renderCalculator();
+initAuth();
 </script>
 </body>
 </html>
