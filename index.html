@@ -171,6 +171,26 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
 /* ── USERS PANEL ── */
 #users-panel{overflow-y:auto;padding:18px;flex-direction:column;gap:12px;background:var(--bg)}
 #users-panel.active{display:flex}
+/* ── QUOTES PANEL ── */
+#quotes-panel{flex-direction:column}
+#quotes-panel.active{display:flex}
+/* ── DASHBOARD TOOLTIP ── */
+.dash-tooltip{
+  position:fixed;z-index:9999;
+  background:#1a1e28;color:#fff;
+  border-radius:8px;padding:12px 14px;
+  font-size:11px;line-height:1.6;
+  max-width:340px;min-width:260px;
+  box-shadow:0 8px 30px rgba(0,0,0,0.25);
+  pointer-events:none;
+  opacity:0;transition:opacity 0.15s;
+}
+.dash-tooltip.visible{opacity:1;}
+.dash-tooltip table{width:100%;border-collapse:collapse;}
+.dash-tooltip th{font-size:9px;color:#8e97ab;letter-spacing:1px;text-transform:uppercase;padding:2px 4px;text-align:left;border-bottom:1px solid #ffffff20;}
+.dash-tooltip td{padding:3px 4px;font-family:'DM Mono',monospace;font-size:10px;}
+.dash-tooltip tr:hover td{background:rgba(255,255,255,0.05);}
+.dash-group-card{cursor:default;}
 /* ── SALES PANEL ── */
 #sales-panel{flex-direction:column}
 #sales-panel.active{display:flex}
@@ -224,17 +244,127 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
 
 <!-- PASSWORD GATE STYLES -->
 <style>
-#pw-gate{position:fixed;inset:0;z-index:9999;background:#f4f5f8;display:flex;align-items:center;justify-content:center;font-family:'DM Sans',sans-serif}
-#pw-box{background:#fff;border:1px solid #e0e4eb;border-radius:12px;padding:40px 44px;width:100%;max-width:400px;box-shadow:0 8px 40px rgba(0,0,0,0.10);text-align:center}
-.pw-logo{font-size:15px;font-weight:800;color:#e8560a;letter-spacing:0.5px;margin-bottom:4px}
-.pw-sub{font-size:10px;color:#8e97ab;letter-spacing:2px;text-transform:uppercase;margin-bottom:28px}
-.pw-label{font-size:11px;font-weight:600;color:#50586a;letter-spacing:0.5px;display:block;margin-bottom:8px;text-align:left}
-#pw-input{width:100%;padding:11px 14px;border:1.5px solid #e0e4eb;border-radius:6px;font-size:14px;font-family:'DM Sans',sans-serif;outline:none;text-align:center;letter-spacing:4px;transition:border-color 0.2s;margin-bottom:14px}
-#pw-input:focus{border-color:#e8560a}
-#pw-submit{width:100%;padding:12px;background:#e8560a;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;letter-spacing:1px;transition:background 0.15s}
-#pw-submit:hover{background:#c44306}
-#pw-error{margin-top:10px;font-size:12px;color:#c02828;min-height:18px}
-.pw-hint{margin-top:20px;font-size:11px;color:#8e97ab}
+/* ── PROFESSIONAL LOGIN ── */
+#login-page{
+  position:fixed;inset:0;z-index:9999;
+  display:flex;font-family:'DM Sans',sans-serif;
+  background:#fff;
+}
+/* Left: clean white panel with brand identity */
+#login-left{
+  width:420px;flex-shrink:0;
+  background:#1a1e28;
+  display:flex;flex-direction:column;justify-content:space-between;
+  padding:48px 44px;
+  position:relative;overflow:hidden;
+}
+#login-left::before{
+  content:'';position:absolute;
+  right:-80px;top:-80px;
+  width:260px;height:260px;border-radius:50%;
+  background:rgba(232,86,10,0.10);pointer-events:none;
+}
+#login-left::after{
+  content:'';position:absolute;
+  left:-40px;bottom:-60px;
+  width:200px;height:200px;border-radius:50%;
+  background:rgba(232,86,10,0.06);pointer-events:none;
+}
+.ll-top{}
+.ll-wordmark{
+  display:flex;align-items:center;gap:10px;
+  margin-bottom:56px;
+}
+.ll-wordmark-bar{
+  width:3px;height:28px;background:#e8560a;border-radius:2px;flex-shrink:0;
+}
+.ll-wordmark-text{
+  font-size:13px;font-weight:800;color:#fff;
+  letter-spacing:1.5px;text-transform:uppercase;line-height:1.2;
+}
+.ll-wordmark-sub{
+  font-size:9px;font-weight:400;color:#8e97ab;
+  letter-spacing:2px;text-transform:uppercase;display:block;margin-top:2px;
+}
+.ll-headline{
+  font-size:28px;font-weight:800;color:#fff;line-height:1.2;
+  margin-bottom:16px;
+}
+.ll-headline em{color:#e8560a;font-style:normal;}
+.ll-body{
+  font-size:13px;color:#8e97ab;line-height:1.8;
+  border-left:2px solid #e8560a33;padding-left:14px;
+  margin-bottom:40px;
+}
+.ll-stats{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.ll-stat-val{font-size:22px;font-weight:800;color:#e8560a;font-family:'DM Mono',monospace;}
+.ll-stat-lbl{font-size:10px;color:#8e97ab;letter-spacing:1px;text-transform:uppercase;margin-top:2px;}
+.ll-bottom{font-size:10px;color:#50586a;letter-spacing:0.5px;}
+
+/* Right: login form */
+#login-right{
+  flex:1;
+  background:#f8f9fb;
+  display:flex;align-items:center;justify-content:center;
+  padding:40px;
+}
+.login-card{
+  background:#fff;
+  border:1px solid #e8eaf0;
+  border-radius:12px;
+  padding:44px 48px;
+  width:100%;max-width:380px;
+  box-shadow:0 2px 16px rgba(0,0,0,0.06);
+}
+.login-eyebrow{
+  font-size:10px;font-weight:700;color:#e8560a;
+  letter-spacing:2px;text-transform:uppercase;
+  margin-bottom:8px;
+}
+.login-heading{
+  font-size:22px;font-weight:800;color:#1a1e28;
+  margin-bottom:6px;
+}
+.login-subhead{font-size:13px;color:#8e97ab;margin-bottom:32px;}
+.lf{margin-bottom:18px;}
+.lf-label{
+  font-size:11px;font-weight:700;color:#50586a;
+  letter-spacing:0.5px;text-transform:uppercase;
+  display:block;margin-bottom:6px;
+}
+.lf-input{
+  width:100%;padding:11px 14px;
+  border:1.5px solid #e4e7ef;border-radius:7px;
+  font-size:14px;font-family:'DM Sans',sans-serif;
+  outline:none;transition:border-color 0.2s,box-shadow 0.2s;
+  background:#fafbfc;color:#1a1e28;
+  box-sizing:border-box;
+}
+.lf-input:focus{border-color:#e8560a;background:#fff;box-shadow:0 0 0 3px rgba(232,86,10,0.09);}
+.lf-input::placeholder{color:#b0b8c8;}
+#login-submit{
+  width:100%;padding:13px 20px;
+  background:#e8560a;color:#fff;border:none;
+  border-radius:7px;font-size:13px;font-weight:700;
+  cursor:pointer;font-family:'DM Sans',sans-serif;
+  letter-spacing:0.5px;transition:background 0.15s,transform 0.1s;
+  margin-top:4px;
+}
+#login-submit:hover{background:#c44306;}
+#login-submit:active{transform:scale(0.99);}
+#login-submit:disabled{background:#c8cdd8;cursor:not-allowed;}
+#login-error{
+  margin-top:12px;font-size:12px;color:#c02828;
+  min-height:18px;text-align:center;
+}
+.login-footer-note{
+  margin-top:24px;text-align:center;
+  font-size:11px;color:#b0b8c8;line-height:1.6;
+}
+@media(max-width:720px){
+  #login-left{display:none;}
+  #login-right{padding:20px;}
+}
 </style>
 </head>
 <body>
@@ -242,34 +372,42 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
 <!-- LOGIN PAGE -->
 <div id="login-page">
   <div id="login-left">
-    <div class="ll-brand">Geveko Markings</div>
-    <div class="ll-title">Pricing &amp;<br><span>Deal Management</span><br>Tool</div>
-    <div class="ll-desc">Streamline your pricing decisions with real-time margin visibility, customer analytics, and professional quote generation.</div>
-    <div class="ll-features">
-      <div class="ll-feat"><div class="ll-feat-dot"></div>Live margin &amp; approval tracking</div>
-      <div class="ll-feat"><div class="ll-feat-dot"></div>Customer sales history dashboard</div>
-      <div class="ll-feat"><div class="ll-feat-dot"></div>Professional PDF quote export</div>
-      <div class="ll-feat"><div class="ll-feat-dot"></div>Role-based access control</div>
+    <div class="ll-top">
+      <div class="ll-wordmark">
+        <div class="ll-wordmark-bar"></div>
+        <div class="ll-wordmark-text">Geveko Markings<span class="ll-wordmark-sub">Road Marking Materials</span></div>
+      </div>
+      <div class="ll-headline">Pricing &amp;<br><em>Deal Management</em><br>Platform</div>
+      <div class="ll-body">
+        Centralised pricing intelligence for the Geveko sales team. Real-time margin tracking, customer analytics and professional quote generation.
+      </div>
+      <div class="ll-stats">
+        <div><div class="ll-stat-val">100%</div><div class="ll-stat-lbl">Margin visibility</div></div>
+        <div><div class="ll-stat-val">PDF</div><div class="ll-stat-lbl">Instant quotes</div></div>
+        <div><div class="ll-stat-val">4</div><div class="ll-stat-lbl">Role levels</div></div>
+        <div><div class="ll-stat-val">Live</div><div class="ll-stat-lbl">Sales dashboard</div></div>
+      </div>
     </div>
-    <div class="ll-copy">© 2026 Geveko Markings · Confidential Internal Tool</div>
+    <div class="ll-bottom">© 2026 Geveko Markings · Internal use only</div>
   </div>
   <div id="login-right">
-    <div class="login-box">
-      <div class="login-logo">Geveko Markings</div>
-      <div class="login-sub">Pricing Tool</div>
-      <div class="login-heading">Welcome back</div>
-      <div class="login-hint">Sign in with your company credentials</div>
-      <div class="login-field">
-        <label class="login-lbl" for="login-email">Email Address</label>
-        <input class="login-inp" type="email" id="login-email" placeholder="you@geveko.com" autocomplete="email" onkeydown="if(event.key==='Enter')g('login-password').focus()">
+    <div class="login-card">
+      <div class="login-eyebrow">Secure Access</div>
+      <div class="login-heading">Sign in</div>
+      <div class="login-subhead">Use your Geveko company email and password</div>
+      <div class="lf">
+        <label class="lf-label" for="login-email">Email Address</label>
+        <input class="lf-input" type="email" id="login-email" placeholder="you@geveko.com"
+          autocomplete="email" onkeydown="if(event.key==='Enter')g('login-password').focus()">
       </div>
-      <div class="login-field">
-        <label class="login-lbl" for="login-password">Password</label>
-        <input class="login-inp" type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+      <div class="lf">
+        <label class="lf-label" for="login-password">Password</label>
+        <input class="lf-input" type="password" id="login-password" placeholder="••••••••"
+          autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
       </div>
-      <button id="login-submit" onclick="doLogin()">SIGN IN →</button>
+      <button id="login-submit" onclick="doLogin()">Sign in →</button>
       <div id="login-error"></div>
-      <div class="login-footer">Access restricted to authorised Geveko personnel.<br>Contact your Pricing Manager for access.</div>
+      <div class="login-footer-note">Access is restricted to authorised Geveko personnel.<br>Contact your Pricing Manager if you need access.</div>
     </div>
   </div>
 </div>
@@ -288,6 +426,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
     <button class="tab-btn admin-tab" onclick="setTab('settings')">Settings</button>
     <button class="tab-btn admin-tab" onclick="setTab('access')">Access</button>
     <button class="tab-btn admin-tab" onclick="setTab('users')">Users</button>
+    <button class="tab-btn" onclick="setTab('quotes')">Quotes</button>
   </div>
   <div class="topbar-right">
     <input type="text" id="deal-name-input" value="New Deal" placeholder="Deal name...">
@@ -625,6 +764,46 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
   </div>
 </div>
 
+<!-- ════════ QUOTES / AUDIT ════════ -->
+<div id="quotes-panel" class="panel">
+  <div class="panel-inner">
+    <!-- Toolbar -->
+    <div class="card fc g10" style="flex-wrap:wrap">
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:14px">Quote History &amp; Audit Trail</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">All saved quotes. Track approvals, customer outcomes, and pricing decisions.</div>
+      </div>
+      <select id="qf-rep" style="font-size:12px" onchange="renderQuotesTable()">
+        <option value="">All Sales Reps</option>
+      </select>
+      <select id="qf-status" style="font-size:12px" onchange="renderQuotesTable()">
+        <option value="">All Statuses</option>
+        <option value="draft">Draft</option>
+        <option value="pending">Pending Approval</option>
+        <option value="approved">Approved</option>
+        <option value="sent">Sent to Customer</option>
+        <option value="accepted">Customer Accepted</option>
+        <option value="declined">Customer Declined</option>
+      </select>
+      <input type="text" id="qf-search" placeholder="Search account or deal..." style="width:180px;font-size:12px" oninput="renderQuotesTable()">
+      <button class="btn btn-primary btn-sm" onclick="saveCurrentQuote()">💾 Save Current Quote</button>
+    </div>
+    <!-- Table -->
+    <div class="card" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
+      <div style="overflow:auto;flex:1">
+        <table class="dt" id="quotes-table">
+          <thead><tr>
+            <th>Ref</th><th>Deal Name</th><th>Account</th><th>Created By</th>
+            <th>Date</th><th>Total Price</th><th>Margin</th>
+            <th>Approval</th><th>Approved By</th><th>Customer Outcome</th><th>Actions</th>
+          </tr></thead>
+          <tbody id="quotes-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
 </div><!-- /content -->
 </div><!-- /app -->
 
@@ -740,7 +919,32 @@ function doLogin(){
   const errEl = g('login-error');
 
   if(!email){errEl.textContent='Please enter your email address.';return;}
-  if(password !== SYSTEM_PASSWORD){errEl.textContent='Incorrect password. Please try again.';g('login-password').value='';return;}
+
+  // Check lockout
+  const lockKey='geveko_lock_'+email;
+  const lockData=JSON.parse(localStorage.getItem(lockKey)||'{}');
+  if(lockData.locked){
+    errEl.textContent='Account locked after too many failed attempts. Contact your Pricing Manager.';
+    g('login-submit').disabled=true;
+    return;
+  }
+
+  if(password !== SYSTEM_PASSWORD){
+    // Track failed attempts
+    const attempts=(lockData.attempts||0)+1;
+    if(attempts>=3){
+      localStorage.setItem(lockKey,JSON.stringify({locked:true,attempts}));
+      errEl.textContent='Account locked after 3 failed attempts. Contact your Pricing Manager to unlock.';
+      g('login-submit').disabled=true;
+    } else {
+      localStorage.setItem(lockKey,JSON.stringify({attempts}));
+      errEl.textContent=`Incorrect password. ${3-attempts} attempt${3-attempts!==1?'s':''} remaining.`;
+    }
+    g('login-password').value='';
+    return;
+  }
+  // Clear failed attempts on success
+  localStorage.removeItem(lockKey);
 
   // Hardcoded admin account — always accessible to manage users even before any are set up
   const ADMIN_EMAIL = 'admin@geveko.com';
@@ -819,7 +1023,7 @@ const STORE_KEY='geveko_pricing_v2';
 
 function saveState(){
   try{
-    const state={products,approvalLevels,customerTypes,dealTypes,volumeTiers,addOns,salesRows,activeRole,appUsers};
+    const state={products,approvalLevels,customerTypes,dealTypes,volumeTiers,addOns,salesRows,activeRole,appUsers,quoteHistory};
     localStorage.setItem(STORE_KEY,JSON.stringify(state));
   } catch(e){}
 }
@@ -838,6 +1042,7 @@ function loadState(){
     if(state.salesRows&&state.salesRows.length)salesRows=state.salesRows;
     if(state.activeRole)activeRole=state.activeRole;
     if(state.appUsers&&state.appUsers.length)appUsers=state.appUsers;
+    if(state.quoteHistory&&state.quoteHistory.length)quoteHistory=state.quoteHistory;
   } catch(e){}
 }
 
@@ -893,6 +1098,7 @@ let addOns=[
 // salesRows: flat array of individual sale records
 // {accountNo, accountName, sales, cm, currency, year, productLine, itemGroup, itemNumber, itemDescription}
 let salesRows=[];
+let quoteHistory=[];
 
 let appUsers=[
   {id:1,name:"Admin User",position:"Pricing Manager",email:"admin@geveko.com",role:"pricing_mgr"},
@@ -963,6 +1169,7 @@ function setTab(t){
   if(t==='access')renderAccessTab();
   if(t==='users')renderUsersTable();
   if(t==='sales')renderSalesTable();
+  if(t==='quotes'){renderQuotesTable();populateRepFilter();}
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1113,8 +1320,12 @@ function renderLineItems(){
       const pRows=acctSales.filter(x=>x.itemNumber===prod.sku);
       if(pRows.length){
         const rev=pRows.reduce((s,x)=>s+(x.sales||0),0);
-        const yr=[...new Set(pRows.map(x=>x.year).filter(Boolean))].join(',');
-        aspHint=`<div class="asp-hint">↑ Sales: ${fmtEur(rev)}${yr?' ('+yr+')':''}</div>`;
+        // Collect qty from sales rows if available, else try to estimate from CM
+        const totalUnits=pRows.reduce((s,x)=>s+(parseFloat(x.qty)||0),0);
+        const asp=totalUnits>0?rev/totalUnits:null;
+        const yrs=[...new Set(pRows.map(x=>x.year).filter(Boolean))].sort().join(', ');
+        const aspStr=asp?` · ASP ${fmtEur(asp)}/unit`:'';
+        aspHint=`<div class="asp-hint">↑ Prev. sales: ${fmtEur(rev)}${aspStr}${yrs?' ('+yrs+')':''}</div>`;
       }
     }
     const ov=item.manualPrice!==null?item.manualPrice:'';
@@ -1221,7 +1432,9 @@ function calcTotals(){
   const final=tSelling*(1+vm);
   const tCostAdj=tCost;
   const finM=final>0?(final-tCostAdj)/final:0;
-  const appr=approvalLevels.slice().sort((a,b)=>a.minMargin-b.minMargin).find(a=>finM*100>=a.minMargin)||approvalLevels[approvalLevels.length-1];
+  // Sort descending: find the highest threshold the margin still qualifies for
+  const sortedLevels=approvalLevels.slice().sort((a,b)=>b.minMargin-a.minMargin);
+  const appr=sortedLevels.find(a=>finM*100>=a.minMargin)||sortedLevels[sortedLevels.length-1];
   return{tCost:tCostAdj,tList,tSelling,totalMod,vm,final,finM,appr,vt};
 }
 
@@ -1325,8 +1538,16 @@ function showAcctSuggestions(val){
 function selectAcct(no,name){
   const inp=g('account-number');if(inp)inp.value=no;
   const an=g('account-name');if(an)an.value=name;
+  // Close both suggestion lists immediately
   const list=g('acct-suggestions');if(list)list.classList.remove('open');
-  onAccountInput(no);
+  const nlist=g('acct-name-suggestions');if(nlist)nlist.classList.remove('open');
+  // Update dashboard without re-triggering suggestions
+  const key=no.trim().toUpperCase();
+  const rows=getAccountSales(key);
+  const badge=g('account-found-badge');
+  if(badge)badge.style.display=rows?'block':'none';
+  if(rows)renderDashboard(rows,key);
+  else{const d=g('acct-dashboard');if(d)d.classList.remove('visible');}
 }
 
 function toggleDashboard(){
@@ -1371,12 +1592,18 @@ function renderDashboard(rows,acctNo){
   });
 
   const cards=g('dash-cards');if(!cards)return;
+  // Store rows on the dashboard element so tooltip can access them
+  cards._dashRows=rows;
   cards.innerHTML=Object.values(byLine).sort((a,b)=>b.sales-a.sales).map(pl=>{
     const plCmPct=pl.sales>0?pl.cm/pl.sales:0;
     const shareOfTotal=totalSales>0?pl.sales/totalSales:0;
     const groups=[...pl.itemGroups].slice(0,3).join(', ')+(pl.itemGroups.size>3?' …':'');
-    return `<div class="dash-group-card">
-      <div class="dash-group-name">${pl.productLine}</div>
+    const plNameEsc=pl.productLine.replace(/'/g,"\\'");
+    return `<div class="dash-group-card"
+      onmouseenter="showPlTooltip(event,'${plNameEsc}',document.getElementById('dash-cards')._dashRows)"
+      onmousemove="moveTooltip(event)"
+      onmouseleave="hideTooltip()">
+      <div class="dash-group-name">${pl.productLine} <span style="font-size:9px;color:var(--text3)">ⓘ</span></div>
       <div class="dash-group-sub">${pl.skus.size} SKU${pl.skus.size!==1?'s':''} · ${fmtPct(shareOfTotal)} of total${groups?' · '+groups:''}</div>
       <div class="dash-stats">
         <div class="ds"><div class="ds-l">Total Sales</div><div class="ds-v t-o">${fmtEur(pl.sales)}</div></div>
@@ -1661,6 +1888,7 @@ function parseSales(raw){
     if(n.includes('cm')||n.includes('contribution')||n.includes('margin'))hmap.cm=k;
     if(n.includes('currency')||n==='curr')hmap.currency=k;
     if(n.includes('period')||n.includes('year')||n.includes('quarter'))hmap.year=k;
+    if(n.includes('qty')||n.includes('quantity')||n.includes('volume')||n.includes('units'))hmap.qty=k;
     if(n.includes('productline')||n==='line'||(n.includes('product')&&n.includes('line')))hmap.productLine=k;
     if(n.includes('itemgroup')||n.includes('group'))hmap.itemGroup=k;
     if(n.includes('description')||n.includes('desc')||n.includes('itemname'))hmap.itemDescription=k;
@@ -1675,6 +1903,7 @@ function parseSales(raw){
     const itemNumber=String(row[hmap.itemNumber]||'').trim();
     const sales=parseFloat(String(row[hmap.sales]).replace(/[^0-9.-]/g,''));
     const cm=hmap.cm?parseFloat(String(row[hmap.cm]).replace(/[^0-9.-]/g,''))||0:null;
+    const qty=hmap.qty?parseFloat(String(row[hmap.qty]).replace(/[^0-9.-]/g,''))||0:0;
     const currency=hmap.currency?String(row[hmap.currency]||'EUR').trim():'EUR';
     const year=hmap.year?String(row[hmap.year]||'').trim():'';
     const productLine=hmap.productLine?String(row[hmap.productLine]||'').trim():'';
@@ -1683,7 +1912,7 @@ function parseSales(raw){
     if(!accountNo){errs.push(`Row ${i+2}: Missing account number — skipped`);return;}
     if(!itemNumber){errs.push(`Row ${i+2}: Missing item number — skipped`);return;}
     if(isNaN(sales)){errs.push(`Row ${i+2}: Invalid sales value — skipped`);return;}
-    parsed.push({accountNo,accountName,itemNumber,sales,cm,currency,year,productLine,itemGroup,itemDescription});
+    parsed.push({accountNo,accountName,itemNumber,sales,cm,qty,currency,year,productLine,itemGroup,itemDescription});
   });
   if(!parsed.length){showImpErr('sales',[...errs,'No valid rows found.']);return;}
   importBuffer.sales.rows=parsed;showSalesPreview(parsed,errs);
@@ -1948,8 +2177,269 @@ function exportQuotePDF(){
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// SETTINGS EXPORT / IMPORT
+// QUOTE HISTORY / AUDIT TRAIL
 // ═══════════════════════════════════════════════════════════════════
+let quoteHistory = [];
+
+function saveCurrentQuote(){
+  const t=calcTotals();
+  const dealName=g('deal-name-input')?.value||'Untitled';
+  const acctName=g('account-name')?.value||'';
+  const acctNo=g('account-number')?.value||'';
+  const notes=g('deal-notes')?.value||'';
+  if(!lineItems.some(l=>products.find(p=>p.id===l.productId))){
+    alert('Add at least one product before saving a quote.');return;
+  }
+  const ref='GEV-'+Date.now().toString().slice(-6);
+  const quote={
+    id:Date.now(),
+    ref,
+    dealName,
+    acctName,
+    acctNo,
+    createdBy: currentUser?currentUser.name:'Unknown',
+    createdByEmail: currentUser?currentUser.email:'',
+    createdByRole: currentUser?currentUser.role:'',
+    date: new Date().toISOString(),
+    totalPrice: t.final,
+    margin: t.finM,
+    approvalRequired: t.appr?t.appr.label:'',
+    approvedBy: '',
+    approvedDate: '',
+    status: t.appr&&t.appr.id!=='auto'?'pending':'approved',
+    customerOutcome: '',
+    outcomeDate: '',
+    notes,
+    lineItems: lineItems.map(l=>{
+      const prod=products.find(p=>p.id===l.productId);
+      const r=calcLine(l);
+      return{sku:prod?.sku||'',name:prod?.name||'',qty:l.qty,selling:r.selling,margin:r.margin};
+    }),
+    customerType,dealType,
+    selectedAddOns:[...selectedAddOns],
+    version: (quoteHistory.filter(q=>q.acctNo===acctNo&&q.dealName===dealName).length)+1,
+  };
+  quoteHistory.unshift(quote);
+  saveState();
+  // Auto-trigger approval email if needed
+  if(quote.status==='pending') sendApprovalEmail(quote);
+  alert('✅ Quote '+ref+' saved to history.');
+  renderQuotesTable();
+}
+
+function sendApprovalEmail(quote){
+  // Find approver — first user with pricing_mgr or sales_director role
+  const approver=appUsers.find(u=>u.role==='pricing_mgr'||u.role==='sales_director');
+  if(!approver){return;}
+  const subject=encodeURIComponent('Approval Required: '+quote.dealName+' ('+quote.ref+')');
+  const body=encodeURIComponent(
+    'Hi '+approver.name+',
+
+'+
+    'A quote requires your approval:
+
+'+
+    'Reference: '+quote.ref+'
+'+
+    'Deal: '+quote.dealName+'
+'+
+    'Account: '+(quote.acctName||quote.acctNo)+'
+'+
+    'Total Price: '+fmtEur(quote.totalPrice)+'
+'+
+    'Gross Margin: '+fmtPct(quote.margin)+'
+'+
+    'Approval Level: '+quote.approvalRequired+'
+'+
+    'Submitted by: '+quote.createdBy+'
+'+
+    'Date: '+new Date(quote.date).toLocaleDateString('en-GB')+'
+
+'+
+    'Please review and approve in the Geveko Pricing Tool.
+
+'+
+    'This is an automated notification from the Geveko Pricing Tool.'
+  );
+  window.open('mailto:'+approver.email+'?subject='+subject+'&body='+body);
+}
+
+function approveQuote(id){
+  if(!currentUser){return;}
+  quoteHistory=quoteHistory.map(q=>{
+    if(q.id!==id)return q;
+    return{...q,status:'approved',approvedBy:currentUser.name,approvedDate:new Date().toISOString()};
+  });
+  saveState();renderQuotesTable();
+}
+
+function markSent(id){
+  quoteHistory=quoteHistory.map(q=>q.id===id?{...q,status:'sent'}:q);
+  saveState();renderQuotesTable();
+}
+
+function setOutcome(id,outcome){
+  quoteHistory=quoteHistory.map(q=>q.id===id?{...q,customerOutcome:outcome,outcomeDate:new Date().toISOString(),status:outcome==='accepted'?'accepted':'declined'}:q);
+  saveState();renderQuotesTable();
+}
+
+function loadQuoteToCalc(id){
+  const q=quoteHistory.find(x=>x.id===id);if(!q)return;
+  if(!confirm('Load quote '+q.ref+' into the calculator? Current data will be replaced.'))return;
+  g('deal-name-input').value=q.dealName;
+  g('account-name').value=q.acctName||'';
+  g('account-number').value=q.acctNo||'';
+  g('deal-notes').value=q.notes||'';
+  customerType=q.customerType||'first';
+  dealType=q.dealType||'standard';
+  selectedAddOns=[...(q.selectedAddOns||[])];
+  lineItems=q.lineItems.map((l,i)=>{
+    const prod=products.find(p=>p.sku===l.sku);
+    return{id:Date.now()+i,productId:prod?prod.id:null,qty:l.qty,manualPrice:null};
+  });
+  setTab('calculator');
+  renderCalculator();
+}
+
+function populateRepFilter(){
+  const sel=g('qf-rep');if(!sel)return;
+  const reps=[...new Set(quoteHistory.map(q=>q.createdBy).filter(Boolean))];
+  const cur=sel.value;
+  sel.innerHTML='<option value="">All Sales Reps</option>'+reps.map(r=>`<option value="${r}">${r}</option>`).join('');
+  if(cur)sel.value=cur;
+}
+
+function renderQuotesTable(){
+  const tbody=g('quotes-table-body');if(!tbody)return;
+  const fRep=g('qf-rep')?.value||'';
+  const fStatus=g('qf-status')?.value||'';
+  const fSearch=(g('qf-search')?.value||'').toLowerCase();
+  // Sales reps only see their own quotes
+  const role=ROLES.find(r=>r.id===activeRole);
+  const isSalesRep=activeRole==='sales_rep';
+  let filtered=quoteHistory.filter(q=>{
+    if(isSalesRep&&q.createdByEmail!==(currentUser?.email||''))return false;
+    if(fRep&&q.createdBy!==fRep)return false;
+    if(fStatus&&q.status!==fStatus)return false;
+    if(fSearch&&!q.dealName.toLowerCase().includes(fSearch)&&!(q.acctName||'').toLowerCase().includes(fSearch)&&!q.ref.toLowerCase().includes(fSearch))return false;
+    return true;
+  });
+  if(!filtered.length){
+    tbody.innerHTML=`<tr><td colspan="11" style="text-align:center;color:var(--text3);padding:28px">No quotes saved yet. Use "Save Current Quote" from the Calculator tab.</td></tr>`;
+    return;
+  }
+  const statusColors={draft:'var(--text3)',pending:'var(--yellow)',approved:'var(--green)',sent:'var(--blue)',accepted:'#1a9e6e',declined:'var(--red)'};
+  const statusLabels={draft:'Draft',pending:'⏳ Pending',approved:'✓ Approved',sent:'📤 Sent',accepted:'✅ Accepted',declined:'❌ Declined'};
+  tbody.innerHTML=filtered.map(q=>{
+    const sc=statusColors[q.status]||'var(--text3)';
+    const sl=statusLabels[q.status]||q.status;
+    const canApprove=(activeRole==='pricing_mgr'||activeRole==='sales_director')&&q.status==='pending';
+    const canSetOutcome=q.status==='sent'||q.status==='approved';
+    return `<tr>
+      <td style="font-family:var(--font-mono);font-size:11px;font-weight:600;color:var(--orange)">${q.ref}</td>
+      <td style="font-weight:600">${q.dealName}${q.version>1?` <span style="font-size:9px;color:var(--text3)">v${q.version}</span>`:''}</td>
+      <td>${q.acctName||q.acctNo||'—'}</td>
+      <td style="font-size:12px">${q.createdBy}</td>
+      <td style="font-size:11px;color:var(--text3)">${new Date(q.date).toLocaleDateString('en-GB')}</td>
+      <td style="font-family:var(--font-mono);color:var(--orange)">${fmtEur(q.totalPrice)}</td>
+      <td class="margin-col" style="font-family:var(--font-mono);color:${marginColor(q.margin)}">${fmtPct(q.margin)}</td>
+      <td style="font-size:11px;color:var(--text2)">${q.approvalRequired||'Auto'}</td>
+      <td style="font-size:11px">${q.approvedBy||'—'}</td>
+      <td><span style="font-size:11px;font-weight:700;color:${sc}">${sl}</span></td>
+      <td>
+        <div class="flex g6" style="flex-wrap:wrap">
+          ${canApprove?`<button class="btn btn-primary btn-xs" onclick="approveQuote(${q.id})">Approve</button>`:''}
+          ${q.status==='approved'?`<button class="btn btn-secondary btn-xs" onclick="markSent(${q.id})">Mark Sent</button>`:''}
+          ${canSetOutcome?`
+            <button class="btn btn-xs" style="background:var(--green-lt);color:var(--green);border:1px solid #b0e0d0" onclick="setOutcome(${q.id},'accepted')">✓ Won</button>
+            <button class="btn btn-xs" style="background:var(--red-lt);color:var(--red);border:1px solid #f0c0c0" onclick="setOutcome(${q.id},'declined')">✗ Lost</button>
+          `:''}
+          <button class="btn btn-secondary btn-xs" onclick="loadQuoteToCalc(${q.id})">Load</button>
+          ${q.status==='pending'?`<button class="btn btn-secondary btn-xs" onclick="sendApprovalEmail(quoteHistory.find(x=>x.id===${q.id}))">📧 Notify</button>`:''}
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PRODUCT LINE HOVER TOOLTIP
+// ═══════════════════════════════════════════════════════════════
+let _tooltip=null;
+function getOrCreateTooltip(){
+  if(!_tooltip){
+    _tooltip=document.createElement('div');
+    _tooltip.className='dash-tooltip';
+    _tooltip.id='dash-pl-tooltip';
+    document.body.appendChild(_tooltip);
+  }
+  return _tooltip;
+}
+
+function showPlTooltip(evt,plName,rows){
+  const tt=getOrCreateTooltip();
+  // Get rows for this product line
+  const plRows=rows.filter(r=>r.productLine===plName);
+  // Group by SKU
+  const bySku={};
+  plRows.forEach(r=>{
+    const k=r.itemNumber||'?';
+    if(!bySku[k])bySku[k]={sku:k,desc:r.itemDescription||r.itemNumber||'',sales:0,cm:0,qty:0,years:new Set()};
+    bySku[k].sales+=(r.sales||0);
+    bySku[k].cm+=(r.cm||0);
+    bySku[k].qty+=(parseFloat(r.qty)||0);
+    if(r.year)bySku[k].years.add(r.year);
+  });
+  const skuList=Object.values(bySku).sort((a,b)=>b.sales-a.sales);
+  let html=`<div style="font-size:10px;font-weight:800;color:#e8560a;letter-spacing:1px;margin-bottom:8px;text-transform:uppercase">${plName}</div>`;
+  html+=`<table><thead><tr><th>Item No.</th><th>Description</th><th>Sales</th><th>CM%</th><th>Year(s)</th>`;
+  const hasQty=skuList.some(s=>s.qty>0);
+  if(hasQty)html+=`<th>ASP</th>`;
+  html+=`</tr></thead><tbody>`;
+  skuList.forEach(s=>{
+    const cmPct=s.sales>0?s.cm/s.sales:0;
+    const asp=s.qty>0?s.sales/s.qty:null;
+    const descShort=s.desc.length>18?s.desc.substring(0,18)+'…':s.desc;
+    html+=`<tr>
+      <td style="color:#e8560a">${s.sku}</td>
+      <td>${descShort}</td>
+      <td>${fmtEur(s.sales)}</td>
+      <td style="color:${s.cm>0?'#4ade80':'#f87171'}">${fmtPct(cmPct)}</td>
+      <td style="color:#8e97ab">${[...s.years].sort().join(', ')||'—'}</td>
+      ${hasQty?`<td>${asp?fmtEur(asp):'—'}</td>`:''}
+    </tr>`;
+  });
+  html+=`</tbody></table>`;
+  tt.innerHTML=html;
+  tt.classList.add('visible');
+  positionTooltip(evt,tt);
+}
+
+function positionTooltip(evt,tt){
+  const margin=12;
+  const tw=Math.min(360,window.innerWidth-margin*2);
+  tt.style.width=tw+'px';
+  let left=evt.clientX+margin;
+  let top=evt.clientY+margin;
+  if(left+tw>window.innerWidth-margin)left=evt.clientX-tw-margin;
+  if(top+tt.offsetHeight>window.innerHeight-margin)top=evt.clientY-tt.offsetHeight-margin;
+  tt.style.left=left+'px';
+  tt.style.top=top+'px';
+}
+
+function moveTooltip(evt){
+  const tt=getOrCreateTooltip();
+  if(tt.classList.contains('visible'))positionTooltip(evt,tt);
+}
+
+function hideTooltip(){
+  const tt=getOrCreateTooltip();
+  tt.classList.remove('visible');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SETTINGS EXPORT / IMPORT
+// ═══════════════════════════════════════════════════════════════
 function exportSettings(){
   const config={
     products, approvalLevels, customerTypes, dealTypes, volumeTiers, addOns,
