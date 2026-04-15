@@ -408,6 +408,9 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
       <button id="login-submit" onclick="doLogin()">Sign in →</button>
       <div id="login-error"></div>
       <div class="login-footer-note">Access is restricted to authorised Geveko personnel.<br>Contact your Pricing Manager if you need access.</div>
+      <div style="margin-top:12px;text-align:center">
+        <a href="#" onclick="emergencyUnlock();return false;" style="font-size:10px;color:#b0b8c8;text-decoration:none;border-bottom:1px dashed #d0d4dc">Having trouble? Clear login attempts</a>
+      </div>
     </div>
   </div>
 </div>
@@ -730,6 +733,14 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
 
 <!-- ════════ USERS ════════ -->
 <div id="users-panel" class="panel">
+  <div class="card" style="margin:18px;max-width:700px;background:var(--yellow-lt);border-color:#f0dfa0" id="unlock-card" style="display:none">
+    <div class="card-title ct-yellow">Unlock Account</div>
+    <div class="fc g8">
+      <input type="email" id="unlock-email" placeholder="user@geveko.com" style="flex:1;font-size:13px">
+      <button class="btn btn-primary btn-sm" onclick="unlockAccount()">Unlock</button>
+    </div>
+    <div id="unlock-result" style="font-size:12px;margin-top:8px;color:var(--green)"></div>
+  </div>
   <div class="card" style="margin:18px;max-width:700px">
     <div class="card-title ct-purple">Add User</div>
     <div style="display:grid;grid-template-columns:2fr 1fr 2fr 1fr auto;gap:10px;align-items:end">
@@ -914,26 +925,36 @@ const SESSION_KEY = "geveko_auth_v2";
 let currentUser = null;
 
 function doLogin(){
+  try{
   const email = (g('login-email')?.value||'').trim().toLowerCase();
   const password = g('login-password')?.value||'';
   const errEl = g('login-error');
 
   if(!email){errEl.textContent='Please enter your email address.';return;}
 
-  // Check lockout
+  // Check lockout (auto-clears after 30 minutes)
   const lockKey='geveko_lock_'+email;
-  const lockData=JSON.parse(localStorage.getItem(lockKey)||'{}');
+  let lockData=JSON.parse(localStorage.getItem(lockKey)||'{}');
   if(lockData.locked){
-    errEl.textContent='Account locked after too many failed attempts. Contact your Pricing Manager.';
-    g('login-submit').disabled=true;
-    return;
+    const lockedAt=lockData.lockedAt||0;
+    const minutesElapsed=(Date.now()-lockedAt)/60000;
+    if(minutesElapsed>30){
+      // Auto-unlock after 30 minutes
+      localStorage.removeItem(lockKey);
+      lockData={};
+    } else {
+      const minsLeft=Math.ceil(30-minutesElapsed);
+      errEl.textContent='Account locked. Auto-unlocks in '+minsLeft+' min, or contact your Pricing Manager.';
+      g('login-submit').disabled=true;
+      return;
+    }
   }
 
   if(password !== SYSTEM_PASSWORD){
     // Track failed attempts
     const attempts=(lockData.attempts||0)+1;
     if(attempts>=3){
-      localStorage.setItem(lockKey,JSON.stringify({locked:true,attempts}));
+      localStorage.setItem(lockKey,JSON.stringify({locked:true,attempts,lockedAt:Date.now()}));
       errEl.textContent='Account locked after 3 failed attempts. Contact your Pricing Manager to unlock.';
       g('login-submit').disabled=true;
     } else {
@@ -963,6 +984,11 @@ function doLogin(){
   sessionStorage.setItem(SESSION_KEY, JSON.stringify({email:user.email, role:user.role}));
   showApp(user.role);
   errEl.textContent='';
+  }catch(err){
+    const errEl=g('login-error');
+    if(errEl)errEl.textContent='Login error: '+err.message+'. Please refresh the page.';
+    console.error('Login error:',err);
+  }
 }
 
 function showApp(roleId){
@@ -972,6 +998,26 @@ function showApp(roleId){
   if(app) app.style.display='flex';
   applyRole(roleId);
   renderCalculator();
+}
+
+function emergencyUnlock(){
+  // Clear all lockout records from localStorage
+  const keys=Object.keys(localStorage).filter(k=>k.startsWith('geveko_lock_'));
+  keys.forEach(k=>localStorage.removeItem(k));
+  const errEl=g('login-error');
+  if(errEl){errEl.style.color='var(--green)';errEl.textContent='✅ Login attempts cleared. You can now try again.';}
+  const btn=g('login-submit');if(btn)btn.disabled=false;
+  setTimeout(()=>{if(errEl)errEl.textContent='';if(errEl)errEl.style.color='';},4000);
+}
+
+function unlockAccount(){
+  const email=(g('unlock-email')?.value||'').trim().toLowerCase();
+  if(!email){return;}
+  const lockKey='geveko_lock_'+email;
+  localStorage.removeItem(lockKey);
+  const res=g('unlock-result');
+  if(res)res.textContent='✅ Account unlocked for '+email;
+  g('unlock-email').value='';
 }
 
 function doLogout(){
