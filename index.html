@@ -2552,31 +2552,26 @@ function approveQuote(id){
   var apprLevelMatch=approvalLevels.find(function(a){return a.label===q.approvalRequired;});
   if(apprLevelMatch)apprLevelId=apprLevelMatch.id;
   var steps=(q.approvalSteps||[]).concat([{by:currentUser.name,email:currentUser.email,role:activeRole,date:new Date().toISOString()}]);
-  // Does this approval fully satisfy the requirement, or does it need escalation?
+  // Escalation rules:
+  // Sales lead approving a dir/exec deal -> escalate to director (pending_dir)
+  // Sales director approving an exec deal -> escalate to pricing_mgr (pending_exec)
+  // Anyone else (sales_director on dir deal, pricing_mgr) -> final approval
   var needsEscalation=false;
-  if((apprLevelId==='dir'||apprLevelId==='exec')&&activeRole==='sales_lead'){
-    needsEscalation=true; // sales lead approved mgr layer, still needs director
-  }
-  if(apprLevelId==='exec'&&activeRole==='sales_director'){
-    needsEscalation=true; // director approved dir layer, still needs exec/pricing_mgr
-  }
+  if(activeRole==='sales_lead'&&(apprLevelId==='dir'||apprLevelId==='exec')) needsEscalation=true;
+  if(activeRole==='sales_director'&&apprLevelId==='exec') needsEscalation=true;
   if(needsEscalation){
-    // Partial approval — escalate to next level
-    var nextStatus=apprLevelId==='exec'?'pending_dir':'pending_dir';
-    if(apprLevelId==='dir'&&activeRole==='sales_lead') nextStatus='pending_dir';
-    if(apprLevelId==='exec'&&activeRole==='sales_director') nextStatus='pending_exec';
+    var nextStatus=(activeRole==='sales_director'&&apprLevelId==='exec')?'pending_exec':'pending_dir';
     quoteHistory=quoteHistory.map(function(x){
       if(x.id!==id)return x;
       return Object.assign({},x,{status:nextStatus,approvalSteps:steps,approvedBy:currentUser.name+' (partial)'});
     });
     saveState();renderQuotesTable();
-    // Email the next approver
     var nextApprover=getEscalationTarget(currentUser.email,activeRole);
     if(!nextApprover){alert('Could not find next approver. Please escalate manually.');return;}
-    var stepNames=steps.map(function(s){return s.by+' ('+ROLES.find(function(r){return r.id===s.role;})?ROLES.find(function(r){return r.id===s.role;}).label:s.role+')\n';});
+    var approvedSoFar=steps.map(function(s){return s.by;}).join(', ');
     var lines=[
       'Hi '+nextApprover.name+',','',
-      'A quote has been approved at manager level and now requires your approval:','',
+      'A quote has been approved at manager level and requires your further approval:','',
       'Reference: '+q.ref,
       'Deal: '+q.dealName,
       'Account: '+(q.acctName||q.acctNo||''),
@@ -2584,38 +2579,36 @@ function approveQuote(id){
       'Gross Margin: '+fmtPct(q.margin),
       'Approval Required: '+(q.approvalRequired||''),
       'Created by: '+(q.createdBy||''),
-      'Approved so far by: '+currentUser.name,
+      'Approved so far by: '+approvedSoFar,
       'Date: '+new Date().toLocaleDateString('en-GB'),
       '','Please log in to the Geveko Pricing Tool to complete the approval.',
       '','This is an automated notification.'
     ];
-    mailTo(nextApprover.email,'Escalation — Further Approval Required: '+q.dealName+' ('+q.ref+')',lines);
+    mailTo(nextApprover.email,'Escalation - Further Approval Required: '+q.dealName+' ('+q.ref+')',lines);
   } else {
-    // Final approval — deal is fully approved
     quoteHistory=quoteHistory.map(function(x){
       if(x.id!==id)return x;
       return Object.assign({},x,{status:'approved',approvedBy:currentUser.name,approvedDate:new Date().toISOString(),approvalSteps:steps});
     });
     saveState();renderQuotesTable();
-    // Email creator + all previous approvers
     var creator=appUsers.find(function(u){return u.email===q.createdByEmail;});
-    var recipients=[creator].concat(steps.slice(0,-1).map(function(s){return appUsers.find(function(u){return u.email===s.email;});})).filter(Boolean);
-    var uniqueRecipients=[];
-    var seenEmails={};
-    recipients.forEach(function(r){if(r&&!seenEmails[r.email]){uniqueRecipients.push(r);seenEmails[r.email]=true;}});
+    var seenEmails={};var uniqueRecipients=[];
+    [creator].concat(steps.slice(0,-1).map(function(s){return appUsers.find(function(u){return u.email===s.email;});})).filter(Boolean).forEach(function(r){
+      if(r&&!seenEmails[r.email]){uniqueRecipients.push(r);seenEmails[r.email]=true;}
+    });
     var toEmails=uniqueRecipients.map(function(r){return r.email;}).join(',');
     if(toEmails){
-      var stepSummary=steps.map(function(s){return s.by;}).join(' → ');
+      var stepSummary=steps.map(function(s){return s.by;}).join(' - ');
       var lines=[
-        'Hi,',' ',
-        'Great news — the following quote has been fully approved and is ready to be sent to the customer!','',
+        'Hi,','',
+        'The following quote has been fully approved and is ready to send to the customer!','',
         'Reference: '+q.ref,
         'Deal: '+q.dealName,
         'Account: '+(q.acctName||q.acctNo||''),
         'Total Price: '+fmtEur(q.totalPrice),
         'Gross Margin: '+fmtPct(q.margin),
         'Final approval by: '+currentUser.name,
-        'Approval chain: '+stepSummary+(stepSummary?(' → '+currentUser.name):''),
+        'Approval chain: '+stepSummary,
         'Date: '+new Date().toLocaleDateString('en-GB'),
         '','The deal creator may now proceed with sending the quote to the customer.',
         '','This is an automated notification from the Geveko Pricing Tool.'
@@ -2624,7 +2617,6 @@ function approveQuote(id){
     }
   }
 }
-
 function denyQuote(id){
   var q=quoteHistory.find(function(x){return x.id===id;});
   if(!q)return;
@@ -2807,21 +2799,30 @@ function renderQuotesTable(){
     // - Sales Director: can approve 'auto', 'mgr', 'dir' level. Cannot approve exec.
     // - Pricing Manager: can approve anything, including own team's deals.
     // - Nobody can approve their own deal if it requires director level or above.
-    // Multi-step approval: pending_mgr = needs sales_lead; pending_dir = needs director; pending_exec = needs pricing_mgr
+    // Multi-step approval status flags
     var isPending=q.status==='pending'||q.status==='pending_mgr'||q.status==='pending_dir'||q.status==='pending_exec';
     var alreadyApprovedByMe=!!(q.approvalSteps||[]).find(function(s){return s.email===(currentUser?currentUser.email:'');});
+    // Determine what approval level the deal requires
+    var qApprLevelId='auto';
+    var qApprMatch=approvalLevels.find(function(a){return a.label===q.approvalRequired;});
+    if(qApprMatch)qApprLevelId=qApprMatch.id;
+    // canApprove rules:
+    // - Sales lead: can be the FIRST approver (pending/pending_mgr) for their team deals,
+    //   but ONLY if the required level is 'mgr'. If dir/exec is required, they can still
+    //   approve as the first step (mgr layer), which then escalates.
+    //   Key: they cannot be the FINAL approver for dir/exec deals.
+    // - Sales director: can approve pending_dir (or pending_mgr where they are next in chain)
+    // - Pricing manager: can approve anything not their own
+    var isFirstStep=q.status==='pending'||q.status==='pending_mgr';
+    var isDirStep=q.status==='pending_dir';
+    var isExecStep=q.status==='pending_exec';
     var canApprove=isPending&&!isOwnDeal&&!alreadyApprovedByMe&&(
       (activeRole==='pricing_mgr')||(
-        activeRole==='sales_director'&&(q.status==='pending'||q.status==='pending_mgr'||q.status==='pending_dir')
+        activeRole==='sales_director'&&(isFirstStep||isDirStep)
       )||(
-        activeRole==='sales_lead'&&(q.status==='pending'||q.status==='pending_mgr')&&(isOwnDeal===false)&&(isTeamDeal||q.createdByEmail===(currentUser?currentUser.email:''))
+        activeRole==='sales_lead'&&isFirstStep&&(isTeamDeal||q.createdByEmail===(currentUser?currentUser.email:''))
       )
     );
-    // Sales lead can approve pending_mgr for team deals (not own)
-    // But also: sales lead IS the first step for escalating deals - they approve FIRST even for dir-level
-    if(isPending&&!isOwnDeal&&!alreadyApprovedByMe&&activeRole==='sales_lead'&&(isTeamDeal)){
-      canApprove=true;
-    }
     var canDeny=isPending&&!isOwnDeal&&!alreadyApprovedByMe&&(
       activeRole==='pricing_mgr'||activeRole==='sales_director'||
       (activeRole==='sales_lead'&&(isTeamDeal))
