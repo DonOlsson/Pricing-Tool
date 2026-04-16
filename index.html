@@ -2655,36 +2655,7 @@ function denyQuote(id){
 }
 
 
-function approveQuote(id){
-  if(!currentUser){return;}
-  var q=quoteHistory.find(function(x){return x.id===id;});
-  if(!q)return;
-  quoteHistory=quoteHistory.map(function(x){
-    if(x.id!==id)return x;
-    return Object.assign({},x,{status:'approved',approvedBy:currentUser.name,approvedDate:new Date().toISOString()});
-  });
-  saveState();renderQuotesTable();
-  // Email creator
-  var creator=appUsers.find(function(u){return u.email===q.createdByEmail;});
-  if(creator&&creator.email){
-    var nl='%0A';
-    var lines=[
-      'Hi '+creator.name+',','',
-      'Great news — your quote has been approved!','',
-      'Reference: '+q.ref,
-      'Deal: '+q.dealName,
-      'Account: '+(q.acctName||q.acctNo||''),
-      'Total Price: '+fmtEur(q.totalPrice),
-      'Approved by: '+currentUser.name,
-      'Date: '+new Date().toLocaleDateString('en-GB'),
-      '','You may now proceed with sending the quote to the customer.',
-      '','This is an automated notification from the Geveko Pricing Tool.'
-    ];
-    var subject=encodeURIComponent('Quote Approved: '+q.dealName+' ('+q.ref+')');
-    var body=lines.map(function(l){return encodeURIComponent(l);}).join(nl);
-    window.open('mailto:'+creator.email+'?subject='+subject+'&body='+body);
-  }
-}
+
 
 function markSent(id){
   quoteHistory=quoteHistory.map(q=>q.id===id?{...q,status:'sent'}:q);
@@ -2816,11 +2787,16 @@ function renderQuotesTable(){
     var isFirstStep=q.status==='pending'||q.status==='pending_mgr';
     var isDirStep=q.status==='pending_dir';
     var isExecStep=q.status==='pending_exec';
+    // canApprove: controls who sees the Approve button.
+    // Sales lead: first-step approver for team deals (approveQuote escalates dir/exec deals automatically)
+    // Sales director: approves at first step OR after sales lead escalates (pending_dir)
+    // Pricing manager: approves anything (including pending_exec)
+    // Nobody approves their own deal, nobody approves twice.
     var canApprove=isPending&&!isOwnDeal&&!alreadyApprovedByMe&&(
       (activeRole==='pricing_mgr')||(
         activeRole==='sales_director'&&(isFirstStep||isDirStep)
       )||(
-        activeRole==='sales_lead'&&isFirstStep&&(isTeamDeal||q.createdByEmail===(currentUser?currentUser.email:''))
+        activeRole==='sales_lead'&&isFirstStep&&isTeamDeal
       )
     );
     var canDeny=isPending&&!isOwnDeal&&!alreadyApprovedByMe&&(
