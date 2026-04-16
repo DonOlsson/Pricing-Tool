@@ -680,7 +680,13 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4}
       <div style="font-size:13px;font-weight:700;color:var(--text)">Settings &amp; Modifiers</div>
       <div style="font-size:11px;color:var(--text3);margin-top:2px">Changes are stored in <em>your</em> browser. Use Export/Import to share settings with your team.</div>
     </div>
-    <button class="btn btn-secondary btn-sm" onclick="exportSettings()">⬇ Export Settings</button>
+    <div style="display:flex;gap:8px;align-items:center;padding:6px 12px;background:var(--orange-lt);border:1px solid var(--orange-mid);border-radius:8px">
+      <span style="font-size:11px;font-weight:700;color:var(--orange)">&#128274; FULL BACKUP</span>
+      <button class="btn btn-primary btn-sm" onclick="exportFullBackup()" title="Download all data as a backup file">&#11015; Export All Data</button>
+      <button class="btn btn-secondary btn-sm" onclick="g('full-restore-file').click()" title="Restore everything from a backup file">&#11014; Restore Backup</button>
+      <input type="file" id="full-restore-file" accept=".json" style="display:none" onchange="importFullBackup(this)">
+    </div>
+    <button class="btn btn-secondary btn-sm" onclick="exportSettings()">&#11015; Export Settings</button>
     <button class="btn btn-primary btn-sm" onclick="g('import-settings-file').click()">⬆ Import Settings</button>
     <input type="file" id="import-settings-file" accept=".json" onchange="importSettings(this)">
   </div>
@@ -2546,19 +2552,28 @@ function approveQuote(id){
   var apprLevelMatch=approvalLevels.find(function(a){return a.label===q.approvalRequired;});
   if(apprLevelMatch)apprLevelId=apprLevelMatch.id;
   var steps=(q.approvalSteps||[]).concat([{by:currentUser.name,email:currentUser.email,role:activeRole,date:new Date().toISOString()}]);
+  // Does this approval fully satisfy the requirement, or does it need escalation?
   var needsEscalation=false;
-  if((apprLevelId==='dir'||apprLevelId==='exec')&&activeRole==='sales_lead') needsEscalation=true;
-  if(apprLevelId==='exec'&&activeRole==='sales_director') needsEscalation=true;
+  if((apprLevelId==='dir'||apprLevelId==='exec')&&activeRole==='sales_lead'){
+    needsEscalation=true; // sales lead approved mgr layer, still needs director
+  }
+  if(apprLevelId==='exec'&&activeRole==='sales_director'){
+    needsEscalation=true; // director approved dir layer, still needs exec/pricing_mgr
+  }
   if(needsEscalation){
-    var nextStatus=(apprLevelId==='exec'&&activeRole==='sales_director')?'pending_exec':'pending_dir';
+    // Partial approval — escalate to next level
+    var nextStatus=apprLevelId==='exec'?'pending_dir':'pending_dir';
+    if(apprLevelId==='dir'&&activeRole==='sales_lead') nextStatus='pending_dir';
+    if(apprLevelId==='exec'&&activeRole==='sales_director') nextStatus='pending_exec';
     quoteHistory=quoteHistory.map(function(x){
       if(x.id!==id)return x;
       return Object.assign({},x,{status:nextStatus,approvalSteps:steps,approvedBy:currentUser.name+' (partial)'});
     });
     saveState();renderQuotesTable();
+    // Email the next approver
     var nextApprover=getEscalationTarget(currentUser.email,activeRole);
     if(!nextApprover){alert('Could not find next approver. Please escalate manually.');return;}
-    var approvedSoFar=steps.map(function(s){return s.by;}).join(', ');
+    var stepNames=steps.map(function(s){return s.by+' ('+ROLES.find(function(r){return r.id===s.role;})?ROLES.find(function(r){return r.id===s.role;}).label:s.role+')\n';});
     var lines=[
       'Hi '+nextApprover.name+',','',
       'A quote has been approved at manager level and now requires your approval:','',
@@ -2569,36 +2584,38 @@ function approveQuote(id){
       'Gross Margin: '+fmtPct(q.margin),
       'Approval Required: '+(q.approvalRequired||''),
       'Created by: '+(q.createdBy||''),
-      'Approved so far by: '+approvedSoFar,
+      'Approved so far by: '+currentUser.name,
       'Date: '+new Date().toLocaleDateString('en-GB'),
       '','Please log in to the Geveko Pricing Tool to complete the approval.',
       '','This is an automated notification.'
     ];
-    mailTo(nextApprover.email,'Escalation - Further Approval Required: '+q.dealName+' ('+q.ref+')',lines);
+    mailTo(nextApprover.email,'Escalation — Further Approval Required: '+q.dealName+' ('+q.ref+')',lines);
   } else {
+    // Final approval — deal is fully approved
     quoteHistory=quoteHistory.map(function(x){
       if(x.id!==id)return x;
       return Object.assign({},x,{status:'approved',approvedBy:currentUser.name,approvedDate:new Date().toISOString(),approvalSteps:steps});
     });
     saveState();renderQuotesTable();
+    // Email creator + all previous approvers
     var creator=appUsers.find(function(u){return u.email===q.createdByEmail;});
-    var seenEmails={};var uniqueRecipients=[];
-    [creator].concat(steps.slice(0,-1).map(function(s){return appUsers.find(function(u){return u.email===s.email;});})).filter(Boolean).forEach(function(r){
-      if(r&&!seenEmails[r.email]){uniqueRecipients.push(r);seenEmails[r.email]=true;}
-    });
+    var recipients=[creator].concat(steps.slice(0,-1).map(function(s){return appUsers.find(function(u){return u.email===s.email;});})).filter(Boolean);
+    var uniqueRecipients=[];
+    var seenEmails={};
+    recipients.forEach(function(r){if(r&&!seenEmails[r.email]){uniqueRecipients.push(r);seenEmails[r.email]=true;}});
     var toEmails=uniqueRecipients.map(function(r){return r.email;}).join(',');
     if(toEmails){
-      var stepSummary=steps.map(function(s){return s.by;}).join(' - ');
+      var stepSummary=steps.map(function(s){return s.by;}).join(' → ');
       var lines=[
-        'Hi,','',
-        'The following quote has been fully approved and is ready to send to the customer!','',
+        'Hi,',' ',
+        'Great news — the following quote has been fully approved and is ready to be sent to the customer!','',
         'Reference: '+q.ref,
         'Deal: '+q.dealName,
         'Account: '+(q.acctName||q.acctNo||''),
         'Total Price: '+fmtEur(q.totalPrice),
         'Gross Margin: '+fmtPct(q.margin),
         'Final approval by: '+currentUser.name,
-        'Approval chain: '+stepSummary,
+        'Approval chain: '+stepSummary+(stepSummary?(' → '+currentUser.name):''),
         'Date: '+new Date().toLocaleDateString('en-GB'),
         '','The deal creator may now proceed with sending the quote to the customer.',
         '','This is an automated notification from the Geveko Pricing Tool.'
@@ -2941,6 +2958,67 @@ function hideTooltip(){
 // ═══════════════════════════════════════════════════════════════
 // SETTINGS EXPORT / IMPORT
 // ═══════════════════════════════════════════════════════════════
+function exportFullBackup(){
+  var backup={
+    _type:'geveko_full_backup',
+    _version:3,
+    _exported:new Date().toISOString(),
+    _exportedBy:currentUser?currentUser.name:'Unknown',
+    products:products,
+    approvalLevels:approvalLevels,
+    customerTypes:customerTypes,
+    dealTypes:dealTypes,
+    volumeTiers:volumeTiers,
+    addOns:addOns,
+    salesRows:salesRows,
+    appUsers:appUsers,
+    quoteHistory:quoteHistory,
+    activeRole:activeRole
+  };
+  var json=JSON.stringify(backup,null,2);
+  var blob=new Blob([json],{type:'application/json'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  var dateStr=new Date().toISOString().slice(0,10);
+  a.download='geveko-full-backup-'+dateStr+'.json';
+  a.click();
+  alert('Backup saved!\n\nThis file contains ALL your data:\n- Products ('+products.length+')\n- Sales records ('+salesRows.length+')\n- Quotes ('+quoteHistory.length+')\n- Users ('+appUsers.length+')\n- Settings & modifiers\n\nStore it somewhere safe (shared drive, email to yourself).');
+}
+
+function importFullBackup(input){
+  var file=input.files[0];if(!file)return;
+  if(!confirm('Restore from backup?\n\nThis will REPLACE all current data:\n- Products\n- Sales records\n- Quotes\n- Users\n- Settings & modifiers\n\nMake sure you have exported the current data first if needed.\n\nContinue?')){input.value='';return;}
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var backup=JSON.parse(e.target.result);
+      if(backup._type!=='geveko_full_backup'){
+        alert('This does not look like a Geveko full backup file. Please use a file exported with "Export All Data".');
+        input.value='';return;
+      }
+      var restored=[];
+      if(backup.products&&backup.products.length){products=backup.products;restored.push('Products: '+products.length);}
+      if(backup.approvalLevels&&backup.approvalLevels.length){approvalLevels=backup.approvalLevels;restored.push('Approval levels');}
+      if(backup.customerTypes&&backup.customerTypes.length){customerTypes=backup.customerTypes;restored.push('Customer types');}
+      if(backup.dealTypes&&backup.dealTypes.length){dealTypes=backup.dealTypes;restored.push('Deal types');}
+      if(backup.volumeTiers&&backup.volumeTiers.length){volumeTiers=backup.volumeTiers;restored.push('Volume tiers');}
+      if(backup.addOns&&backup.addOns.length){addOns=backup.addOns;restored.push('Add-ons');}
+      if(backup.salesRows&&backup.salesRows.length){salesRows=backup.salesRows;restored.push('Sales records: '+salesRows.length);}
+      if(backup.appUsers&&backup.appUsers.length){appUsers=backup.appUsers;restored.push('Users: '+appUsers.length);}
+      if(backup.quoteHistory&&backup.quoteHistory.length){quoteHistory=backup.quoteHistory;restored.push('Quotes: '+quoteHistory.length);}
+      saveState();
+      renderProductTable();renderSalesTable();renderQuotesTable();renderUsersTable();renderSettings();renderCalculator();
+      var exportedBy=backup._exportedBy?('\n\nOriginal backup by: '+backup._exportedBy):'';
+      var exportedOn=backup._exported?('\nBackup date: '+new Date(backup._exported).toLocaleDateString('en-GB')):'';
+      alert('Restore complete!\n\n'+restored.join('\n')+exportedOn+exportedBy);
+    }catch(err){
+      alert('Could not read backup file.\n\nError: '+err.message+'\n\nMake sure you are using a file exported with "Export All Data".');
+    }
+    input.value='';
+  };
+  reader.readAsText(file);
+}
+
 function exportSettings(){
   const config={
     products, approvalLevels, customerTypes, dealTypes, volumeTiers, addOns,
